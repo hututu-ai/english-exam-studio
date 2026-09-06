@@ -66,7 +66,7 @@ https://github.com/hututu-ai/english-exam-studio
 2. 在你的 Agent 中找到技能管理或自定义 Skill 的导入入口，选择这个完整 ZIP。
 3. 确认导入完成、技能已启用；如暂时没有出现，刷新技能列表或新建一个任务再试。
 
-**WorkBuddy 用户：**官方提供“技能 → 添加技能 → 上传技能 → 选择本地技能包”的路径，之后在“已安装”中管理。具体界面以你的版本为准。本包尚未完成 WorkBuddy 全流程生成验收；如果导入或环境准备遇到问题，请让助手检查并按 [常见问题](docs/FAQ.md) 处理。[WorkBuddy 官方技能说明](https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Skills-Market)
+**WorkBuddy 用户**：官方提供“技能 → 添加技能 → 上传技能 → 选择本地技能包”的路径，之后在“已安装”中管理。具体界面以你的版本为准。本包尚未完成 WorkBuddy 全流程生成验收；如果导入或环境准备遇到问题，请让助手检查并按 [常见问题](docs/FAQ.md) 处理。[WorkBuddy 官方技能说明](https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Skills-Market)
 
 如果你用 GitHub 的绿色 `Code → Download ZIP` 下载源码，解压后的文件夹可能叫 `english-exam-studio-main`。手动安装时，将**直接包含 `SKILL.md` 的这一层**作为技能目录，通常命名为 `english-exam-studio`。新手优先用上面的 Release 安装包。
 
