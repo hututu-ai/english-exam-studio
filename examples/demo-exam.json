@@ -1,0 +1,189 @@
+{
+  "title": "Repair, Learn, Share · 原创阅读演示",
+  "subtitle": "两道原创阅读题，用于首次构建检查；不是真实考试材料。",
+  "expected_question_ids": [
+    "21",
+    "22"
+  ],
+  "sections": [
+    {
+      "id": "A",
+      "kind": "reading",
+      "title": "阅读 A · Repair, Learn, Share",
+      "expected_option_count": 4,
+      "paragraphs": [
+        {
+          "id": "A-p1",
+          "text": "On Friday, the students at Willow School opened a repair corner in the library. Instead of throwing away broken items, they invited neighbours to bring them in. Mia, a retired engineer, showed students how to repair a loose chair leg. After the session, the chair was safe to use again.",
+          "translation": "周五，柳树学校的学生在图书馆设立了一个维修角。他们邀请邻居把坏物件带来，而不是直接扔掉。退休工程师米娅向学生示范怎样修理松动的椅子腿。活动结束后，这把椅子又能安全使用了。"
+        },
+        {
+          "id": "A-p2",
+          "text": "The corner opens every Saturday morning. Visitors pay nothing, but they are encouraged to explain how an item was damaged. The club keeps a small notebook of repairs so that new members can learn from earlier mistakes.",
+          "translation": "维修角每周六上午开放。访客无需付费，但鼓励他们解释物件损坏的经过。社团保留一本小小的维修笔记，让新成员能从以前的错误中学习。"
+        }
+      ],
+      "questions": [
+        {
+          "id": "21",
+          "stem": "Why does the club keep a notebook of repairs?",
+          "options": {
+            "A": "To record how much visitors pay.",
+            "B": "To help new members learn from past work.",
+            "C": "To collect visitors' phone numbers.",
+            "D": "To advertise chairs for sale."
+          },
+          "answer": "B",
+          "answer_status": "sample",
+          "answer_source": "原创合成演示题与作者自拟答案，不属于真实考试。",
+          "question_type": "细节理解 · 目的与同义转述",
+          "type_note": "题干 why 问记录的目的，对应原文 so that 后的说明。",
+          "solve_steps": [
+            "定位题干 notebook，在第二段找到对应句。",
+            "识别 so that 引导的目的：新成员从之前的错误中学习。",
+            "把 learn from earlier mistakes 与 learn from past work 对照，选 B。"
+          ],
+          "analysis": "笔记本保存维修经验，目的是帮助新成员吸取过往教训。",
+          "evidence": [
+            {
+              "paragraph_id": "A-p2",
+              "quote": "so that new members can learn from earlier mistakes"
+            }
+          ],
+          "distractors": {
+            "A": "访客不用付费，原文也未说记录收费。",
+            "C": "原文没有收集电话号码的信息。",
+            "D": "原文是修理椅子，没有出售椅子的安排。"
+          },
+          "strategy": "遇到目的题，留意 so that、in order to 等线索，再检查选项是否保留原文的行动对象与目的。",
+          "pitfall": "不要把看似常见的管理用途补进原文。"
+        },
+        {
+          "id": "22",
+          "stem": "Which title best describes the passage?",
+          "options": {
+            "A": "A Library Starts Selling Furniture",
+            "B": "A Competition for Young Engineers",
+            "C": "A Repair Corner That Shares Skills",
+            "D": "A School Replaces All Its Chairs"
+          },
+          "answer": "C",
+          "answer_status": "sample",
+          "answer_source": "原创合成演示题与作者自拟答案，不属于真实考试。",
+          "question_type": "主旨理解 · 标题选择",
+          "type_note": "标题要覆盖维修角的活动和经验分享，不能只截取一个细节。",
+          "solve_steps": [
+            "概括第一段：学生在图书馆办维修角，得到工程师示范。",
+            "概括第二段：免费参与，并记录经验帮助新成员。",
+            "选择同时覆盖维修活动与分享技能的标题 C。"
+          ],
+          "analysis": "两段分别介绍维修活动和经验传递，因此 C 能覆盖全文。",
+          "evidence": [
+            {
+              "paragraph_id": "A-p1",
+              "quote": "opened a repair corner in the library"
+            },
+            {
+              "paragraph_id": "A-p2",
+              "quote": "new members can learn from earlier mistakes"
+            }
+          ],
+          "distractors": {
+            "A": "文章没有出售家具。",
+            "B": "文章没有比赛安排。",
+            "D": "修好一把椅子不等于学校更换所有椅子。"
+          },
+          "strategy": "先用一句话概括每段，再选能覆盖全文主题和主要动作的标题。",
+          "pitfall": "不要用一把椅子的细节代替全文主题。"
+        }
+      ],
+      "structure": [
+        {
+          "title": "活动与示范",
+          "paragraph_ids": [
+            "A-p1"
+          ],
+          "analysis": "先介绍地点与活动，再用修理椅子的例子说明怎样分享技能。"
+        },
+        {
+          "title": "安排与传承",
+          "paragraph_ids": [
+            "A-p2"
+          ],
+          "analysis": "交代开放安排，以记录维修经验说明社团如何持续学习。"
+        }
+      ],
+      "logic_steps": [
+        {
+          "label": "替代做法",
+          "paragraph_id": "A-p1",
+          "quote": "Instead of throwing away broken items",
+          "explanation": "先写通常可能采取的做法，再引出维修和再利用。"
+        },
+        {
+          "label": "目的",
+          "paragraph_id": "A-p2",
+          "quote": "so that new members can learn from earlier mistakes",
+          "explanation": "解释保存维修笔记的目的，对应第 21 题。"
+        }
+      ],
+      "inquiry": [
+        {
+          "question": "Why does the writer include the example of the chair?",
+          "paragraph_id": "A-p1",
+          "answer": "The example makes the repair activity concrete and shows the result of sharing a practical skill."
+        }
+      ],
+      "quick_words": [
+        {
+          "word": "loose",
+          "lemma": "loose",
+          "meaning": "松动的；未固定牢的",
+          "note": "此处修饰 chair leg，指椅子腿松动。",
+          "paragraph_id": "A-p1",
+          "occurrences": 1
+        }
+      ],
+      "vocabulary": [
+        {
+          "word": "repair",
+          "meaning": "修理；修复",
+          "paragraph_id": "A-p1",
+          "quote": "showed students how to repair a loose chair leg",
+          "context": "这里说的是修好物件，让它重新可用。",
+          "collocations": "repair a chair; repair a bicycle",
+          "distinguish": "repair 强调使损坏的物件恢复功能；replace 强调用另一个替换。",
+          "question_ids": [
+            "22"
+          ],
+          "teaching_prompt": "What happens to the chair after the repair?",
+          "transfer": "We repaired the old bench so that it could be used again."
+        }
+      ],
+      "sentences": [
+        {
+          "quote": "The club keeps a small notebook of repairs so that new members can learn from earlier mistakes.",
+          "paragraph_id": "A-p2",
+          "backbone": "The club keeps a notebook.",
+          "chunks": "主句说明做法，so that 从句说明目的。",
+          "logic": "把记录与经验传递建立因果目的关系。",
+          "translation": "社团保留一本维修笔记，让新成员从以前的错误中学习。",
+          "teaching_prompt": "Which part tells us the purpose of keeping the notebook?"
+        }
+      ],
+      "writing_bank": [
+        {
+          "paragraph_id": "A-p2",
+          "quote": "The club keeps a small notebook of repairs so that new members can learn from earlier mistakes.",
+          "category": "做法与目的",
+          "why": "先写具体行动，再解释受益对象和目的，可用于介绍社团活动。",
+          "frame": "We ... so that ... can ...",
+          "scene": "介绍新生互助或社团经验传递。",
+          "example": "We keep a reading journal so that new members can learn from our discussions.",
+          "task": "换成自己参加的一项活动，写一句介绍做法与目的的句子。",
+          "check": "主句有具体行动，so that 后有清楚的受益对象与目的。"
+        }
+      ]
+    }
+  ]
+}
