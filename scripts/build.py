@@ -3,6 +3,7 @@
 import argparse,copy,json,re,shutil,subprocess
 from pathlib import Path
 from verify_output import verify_output, verify_template
+from quality_gate import audit_exam
 KINDS={'listening','reading','seven','cloze','grammar','writing'}
 
 def validate(d):
@@ -118,9 +119,16 @@ def validate_features(d):
         checks.append({'section':sid,'kind':kind,'required_content':required,'status':'passed'})
     return {'status':'passed','sections':checks,'scope':'Required feature data present; human review still needed for teaching quality and source fidelity.'}
 
-def build(src,out):
+def build(src,out,source_ledger=None):
     src=Path(src).resolve();out=Path(out).resolve();original=json.loads(src.read_text(encoding='utf-8'));d=copy.deepcopy(original)
-    report=validate(d);report['feature_coverage']=validate_features(d);verify_template(Path(__file__).resolve().parents[1]);resources=[]
+    for section in d.get('sections',[]):
+        if section.get('kind')=='writing':section['teacher_model_word_count']=len(re.findall(r"[A-Za-z]+(?:['’-][A-Za-z]+)*",section.get('teacher_model','')))
+    report=validate(d);report['feature_coverage']=validate_features(d);report['quality_gate']=audit_exam(d,src.parent,source_ledger)
+    if report['quality_gate']['status']=='blocked':
+        details='; '.join(x['location']+': '+x['code'] for x in report['quality_gate']['errors'])
+        raise ValueError('Delivery blocked: '+details+'; run scripts/quality_gate.py INPUT --source-ledger LEDGER --report quality-report.json for details')
+    report['delivery_status']='content_and_browser_review_required'
+    verify_template(Path(__file__).resolve().parents[1]);resources=[]
     assets=Path(__file__).resolve().parents[1]/'assets'
     for key,filename in [('dictionary','offline-dictionary.json'),('legacy_dictionary','legacy-dictionary.json')]:
         if key not in d and (assets/filename).exists():d[key]=json.loads((assets/filename).read_text())
@@ -170,6 +178,6 @@ def build(src,out):
     print(json.dumps(report,ensure_ascii=False))
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('input');p.add_argument('out');a=p.parse_args()
-    try:build(a.input,a.out)
+    p=argparse.ArgumentParser();p.add_argument('input');p.add_argument('out');p.add_argument('--source-ledger');a=p.parse_args()
+    try:build(a.input,a.out,a.source_ledger)
     except (AssertionError,ValueError,KeyError,FileNotFoundError,subprocess.CalledProcessError) as e:p.exit(1,f'ERROR: {e}\n')

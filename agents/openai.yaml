@@ -1,4 +1,4 @@
 interface:
   display_name: "英语实战讲评 Skill"
   short_description: "提供试卷、答案和听力，生成含逐题讲解、音频分段和读写迁移的教师课件"
-  default_prompt: "使用 $english-exam-studio，根据我提供的试卷、参考答案与听力音频，使用本包固定模板及 scripts/build.py 生成完整的教师 HTML 讲评课件，运行 scripts/verify_output.py 验证模板一致性，不重新设计界面，自动处理整段与逐题录音，保留原文、题型方法、证据定位、精选词句和写作迁移，并核对后打包交付。"
+  default_prompt: "使用 $english-exam-studio，根据我提供的试卷、参考答案与听力音频，先按 references/source-verification.md 核对原件和音频，再使用本包固定模板及 scripts/build.py 生成完整的教师 HTML 讲评课件，运行 scripts/verify_output.py 验证模板一致性，不重新设计界面，自动处理整段与逐题录音，保留原文、题型方法、证据定位、精选词句和写作迁移，并核对后打包交付。"

@@ -1,0 +1,51 @@
+{
+  "sources": [
+    {
+      "role": "original_demo",
+      "path": "demo-reading.json",
+      "sha256": "43aa43cc1e50c6d81bff4771165780e883647a9163eba8135abda4bb41055764"
+    }
+  ],
+  "sections": [
+    {
+      "id": "A",
+      "kind": "reading",
+      "paragraphs": [
+        {
+          "id": "A-p1",
+          "text": "On Friday, the students at Willow School opened a repair corner in the library. Instead of throwing away broken items, they invited neighbours to bring them in. Mia, a retired engineer, showed students how to repair a loose chair leg. After the session, the chair was safe to use again."
+        },
+        {
+          "id": "A-p2",
+          "text": "The corner opens every Saturday morning. Visitors pay nothing, but they are encouraged to explain how an item was damaged. The club keeps a small notebook of repairs so that new members can learn from earlier mistakes."
+        }
+      ],
+      "questions": [
+        {
+          "id": "21",
+          "stem": "Why does the club keep a notebook of repairs?",
+          "options": {
+            "A": "To record how much visitors pay.",
+            "B": "To help new members learn from past work.",
+            "C": "To collect visitors' phone numbers.",
+            "D": "To advertise chairs for sale."
+          },
+          "answer": "B",
+          "answer_status": "sample"
+        },
+        {
+          "id": "22",
+          "stem": "Which title best describes the passage?",
+          "options": {
+            "A": "A Library Starts Selling Furniture",
+            "B": "A Competition for Young Engineers",
+            "C": "A Repair Corner That Shares Skills",
+            "D": "A School Replaces All Its Chairs"
+          },
+          "answer": "C",
+          "answer_status": "sample"
+        }
+      ]
+    }
+  ]
+}
