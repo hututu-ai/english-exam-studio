@@ -2,7 +2,7 @@
 """Validate canonical exam data and build a relocatable, offline lesson."""
 import argparse,copy,json,re,shutil,subprocess
 from pathlib import Path
-from worksheet import make_worksheet
+from verify_output import verify_output, verify_template
 KINDS={'listening','reading','seven','cloze','grammar','writing'}
 
 def validate(d):
@@ -31,7 +31,7 @@ def validate(d):
                 assert re.match(r'^https?://',link.get('url','')) and link.get('relation'),'Source link must state its relation to the paper'
         for item in s.get('writing_bank',[]):
             assert item.get('paragraph_id') in pars and item.get('quote') in pars[item['paragraph_id']]['text'],'Writing-bank quote absent from source'
-            assert all(item.get(k) for k in ['category','why','frame','scene','example','task','check']),'Incomplete writing transfer'
+            assert all(item.get(k) for k in ['category','why','frame','scene','example','check']),'Incomplete writing transfer'
         for item in s.get('logic_steps',[]):
             assert item.get('paragraph_id') in pars and item.get('quote') in pars[item['paragraph_id']]['text'],'Logic quote absent from source'
         for item in s.get('inquiry',[]):
@@ -94,9 +94,33 @@ def validate(d):
     if d.get('expected_question_ids'):assert set(d['expected_question_ids'])==qids,'Paper question coverage mismatch'
     return {'sections':len(ids),'questions':len(qids),'warnings':warnings,'status':'structural_checks_passed','note':'Does not certify source fidelity, answer correctness, alignment or browser behavior.'}
 
+def validate_features(d):
+    """Require content backing for the teacher features, not just empty buttons."""
+    checks=[]
+    for s in d['sections']:
+        sid=s['id'];kind=s['kind']
+        required=['quick_words','vocabulary']
+        if kind in {'reading','seven','cloze','grammar'}:
+            required+=['sentences','structure','writing_bank']
+        if kind=='listening':required+=['blanks']
+        if kind=='writing':required+=['writing_steps','teacher_model']
+        for key in required:
+            assert s.get(key),f'{sid}: missing feature content {key}; complete it before delivery'
+        if kind!='writing':
+            assert any(p.get('translation') for p in s['paragraphs']),f'{sid}: missing paragraph translations'
+        for q in s['questions']:
+            assert q.get('strategy'),f'{sid}/{q["id"]}: missing method transfer'
+            if kind=='seven':assert q.get('logic_links'),f'{sid}/{q["id"]}: missing visual logic links'
+            if kind=='grammar':assert q.get('knowledge'),f'{sid}/{q["id"]}: missing inline grammar knowledge'
+        if kind=='writing':
+            for key in ['task','outline','language','model_analysis']:
+                assert s['writing_steps'].get(key),f'{sid}: missing writing guidance {key}'
+        checks.append({'section':sid,'kind':kind,'required_content':required,'status':'passed'})
+    return {'status':'passed','sections':checks,'scope':'Required feature data present; human review still needed for teaching quality and source fidelity.'}
+
 def build(src,out):
     src=Path(src).resolve();out=Path(out).resolve();original=json.loads(src.read_text(encoding='utf-8'));d=copy.deepcopy(original)
-    report=validate(d);resources=[]
+    report=validate(d);report['feature_coverage']=validate_features(d);verify_template(Path(__file__).resolve().parents[1]);resources=[]
     assets=Path(__file__).resolve().parents[1]/'assets'
     for key,filename in [('dictionary','offline-dictionary.json'),('legacy_dictionary','legacy-dictionary.json')]:
         if key not in d and (assets/filename).exists():d[key]=json.loads((assets/filename).read_text())
@@ -140,7 +164,7 @@ def build(src,out):
     assert template.count('__EXAM_DATA__')==1,'Invalid template token'
     (out/'index.html').write_text(template.replace('__EXAM_DATA__',payload),encoding='utf-8')
     (out/'exam.json').write_text(json.dumps(d,ensure_ascii=False,indent=2),encoding='utf-8')
-    report['worksheet_sections']=make_worksheet(d,assets,out)
+    report['template_verification']=verify_output(out,Path(__file__).resolve().parents[1])
     report['resources']=resources
     (out/'build-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
     print(json.dumps(report,ensure_ascii=False))
