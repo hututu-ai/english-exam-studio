@@ -79,5 +79,6 @@ python3 <Skill目录>/scripts/build.py <你的exam.json> <输出目录> --source
 
 版本与更新内容见仓库首页的版本章节，以及 [Releases](https://github.com/hututu-ai/english-exam-studio/releases) 页面。
 
+- **1.3.4**：章节导航改成顶栏下方一排，点击即可切节，桌面不再为抽屉预留右侧留白。
 - **1.3.3**：补上更新指南与 `scripts/check_update.py` 版本自查，功能与 1.3.2 相同。
 - **1.3.2**：听力一定接入并分三档降级、答案可溯源核对、Windows 与手机可用、生成更快。
