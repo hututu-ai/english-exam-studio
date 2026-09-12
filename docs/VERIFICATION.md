@@ -6,7 +6,7 @@
 - 听力：实际播放整段及两题音频、切换倍速；阻断外部 audio 文件后内嵌录音仍能播放。测试声音为合成音，不能用于证明真实语境切点。
 - 异常恢复：禁用系统朗读、存储不可用、旧课堂记录损坏、小组积分记录损坏、缺少原生 dialog、缺少 Canvas 均能继续导航和打开课堂工具。禁用 JavaScript 时可见静态打开指引。缺少能力的功能明确不可用，不冒充完整环境。
 - 文件验收：十项 Python 测试含缺失/过期浏览器记录拦截、HTML 截断拒绝、跨章节段落 ID 冲突拒绝、中文/空格路径、听力内嵌等。
-- 持续集成：Windows/macOS/Linux × Python 3.9/3.11；另加入 Windows Chromium、Linux Chromium/WebKit 实际点击。每次发布查看对应提交的 [工作流结果](https://github.com/hututu-ai/english-exam-studio/actions/workflows/compatibility.yml)，失败不计为通过。
+- 持续集成：Windows/macOS/Linux × Python 3.9/3.11；另加入 Windows Edge、Linux Chromium、macOS WebKit 实际点击。每次发布查看对应提交的 [工作流结果](https://github.com/hututu-ai/english-exam-studio/actions/workflows/compatibility.yml)，失败不计为通过。
 
 **验证边界**：上述浏览器测试经本机 HTTP 打开产物，不是 file:// 双击或 WorkBuddy/豆包整卷生成实机认证。WorkBuddy 以前生成过真实课件，豆包完整实机链路仍未验证。待教师提供具体故障文件、系统和打开方式后才能判定那一次失败原因。源码/模板一致、浏览器可操作与教学内容正确分别核对。
 
