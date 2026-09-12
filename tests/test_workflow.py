@@ -100,7 +100,7 @@ class Workflow(unittest.TestCase):
         write(manifest,{'kind':'text','expected_count':1,'segments':[row]})
         args=SimpleNamespace(input=str(source),manifest=str(manifest),out=str(self.base/'clips'),transcript=None,resume=False,allow_unverified=False,threads=1,jobs=1)
         def encode(cmd,**kw):Path(cmd[-1]).write_bytes(str(cmd).encode('utf-8'));return ''
-        with patch.object(audio,'probe',side_effect=lambda p:6 if Path(p)==source else 1),patch.object(audio,'run',side_effect=encode) as runner,contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(audio,'probe',side_effect=lambda p:6 if Path(p).resolve()==source.resolve() else 1),patch.object(audio,'run',side_effect=encode) as runner,contextlib.redirect_stdout(io.StringIO()):
             audio.cut(args);args.resume=True;runner.reset_mock();audio.cut(args)
             self.assertEqual(runner.call_count,0)
             row.update(start=3,end=4);write(manifest,{'kind':'text','expected_count':1,'segments':[row]})
