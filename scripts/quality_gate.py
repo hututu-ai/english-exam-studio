@@ -3,7 +3,7 @@
 import argparse,hashlib,json,re,difflib,subprocess
 from pathlib import Path
 from audio_wiring import bundle_dir, wire_audio
-from platform_tools import force_utf8
+from platform_tools import force_utf8, ffprobe_bin
 
 def digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def norm(t):return re.sub(r'\s+',' ',str(t).translate(str.maketrans({'“':'"','”':'"','‘':"'",'’':"'"}))).strip()
@@ -88,7 +88,7 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
                 path=base/alignment.get('transcript_file','');start=alignment.get('full_start');end=alignment.get('full_end');whole=' '.join(p.get('text','') for p in pars)
                 if not isinstance(start,(int,float)) or not isinstance(end,(int,float)) or not 0<=start<end:add('audio_source_window',sid,'原音切点无效');continue
                 try:
-                    probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(audio)],capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=30,check=True)
+                    probe=subprocess.run([ffprobe_bin(),'-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(audio)],capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=30,check=True)
                     duration=float(probe.stdout)
                 except (OSError,ValueError,subprocess.CalledProcessError,subprocess.TimeoutExpired):add('audio_probe',sid,'无法测量实际音频时长');continue
                 if abs(duration-(end-start))>.3:add('audio_source_duration',sid,'整段实际时长与原音切点不符')

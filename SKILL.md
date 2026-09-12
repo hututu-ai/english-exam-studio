@@ -37,7 +37,7 @@ python3 scripts/doctor.py --minutes 已知听力时长
 4. **长句引用只写字符范围**：把引文写成 `{"paragraph_id":"A-p2","quote_ref":[120,158]}`（或 `source_quote_ref`），再用 `python3 scripts/quotes.py fill WORK/exam.json` 自动填成逐字引文。少打几百字引文，也不会因为一个字不一致反复构建失败；`quotes.py check` 能一次性列出所有对不上的引文。
 5. **一轮改完所有校验错误**：构建现在会把全部问题一次性列出来（每条带 section 与题号，形如 `共 6 处问题：L1/2: Answer absent from options`），不再改一个跑一遍。看到清单就一次全改完，再重跑构建。
 
-**快速档与完整档**：`python3 scripts/build.py ... --profile quick` 只要求讲课必需项——逐题解析（题型/解法/易错/证据/干扰项/方法）、答案与答案出处、听力音频或说明与精听挖空、证据段落译文、至少一层词句；句子精讲、篇章结构、写作积累可以后补。报告里会列明 `missing_enrichment` 与 `delivery_status=quick_profile_...`，页面只显示已写好的内容。默认 `full` 要求齐全。用快速档时必须告诉老师"这是快速档、精读项未生成"，补齐字段后用 `--profile full` 重跑即可。
+**快速档与完整档**：`python3 scripts/build.py ... --profile quick` 只要求讲课必需项——逐题解析（题型/解法/易错/证据/干扰项/方法）、答案与答案出处、听力音频或说明与精听挖空、证据段落译文、至少一层词句；句子精讲、篇章结构、写作积累可以后补。报告里会列明 `missing_enrichment` 与 `delivery_status=quick_profile_...`，页面只显示已写好的内容。默认 `full` 要求齐全。用快速档时必须告诉老师"这是快速档，并逐项说明实际缺少的精读内容"，补齐字段后用 `--profile full` 重跑即可。
 
 ## 跨平台与手机打开（Windows 老师同样可用）
 
@@ -70,7 +70,7 @@ python3 scripts/answer_audit.py WORK/exam.json --ledger WORK/source-ledger.json 
 - PDF 逐页提取；扫描页必须 OCR 并核对题号、选项、标点、表格和下划线。无文本不等于空卷。
 - 试卷照片逐页识别，检查漏页、重号、裁切。
 - 没有听力就完成其他题型并说明缺项；无答案可给有依据的“推定答案”，不得冒称官方答案。
-- 输入完整时直接执行，不让用户先写 JSON 或手工切音频。
+- 输入完整且本次范围已明确时直接执行，不让用户先写 JSON 或手工切音频。
 - 老师给了听力音频就一定要在成品里能播：按第二节三档方案接入，禁止因为转写工具不可用而把听力章节删掉或留一个点不动的播放器。
 
 ## 使用者与教学边界

@@ -161,7 +161,7 @@ def validate_features(d,profile='full',selection='all',mode='lesson',audio_mode=
     return {'status':'passed','profile':profile,'sections':checks,'missing_enrichment':enrichment,
             'scope':'Required feature data present; human review still needed for teaching quality and source fidelity.'}
 
-def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='full',selection='all',mode='lesson',audio_mode='embedded'):
+def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='full',selection='all',mode=None,audio_mode='embedded'):
     src=Path(src).resolve();out=Path(out).resolve();original=json.loads(src.read_text(encoding='utf-8'));d=select(original,selection,mode)
     started=time.perf_counter()
     for section in d.get('sections',[]):
@@ -185,7 +185,8 @@ def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='
     report['audio']=audio_report
     report['pending_items']=sorted(set(audio_report['pending']+[x['location']+'：'+x['message'] for x in report['quality_gate'].get('warnings',[])]+[f"第{x['question']}题：{x['message']}" for x in report['answer_audit']['review']]))
     report['delivery_status']='quick_profile_content_and_browser_review_required' if profile=='quick' else 'content_and_browser_review_required'
-    if profile=='quick':report['pending_items']=sorted(set(report.get('pending_items',[])+['快速档：精读项（句子精讲/篇章结构/写作积累）未生成，补齐后跑 --profile full 重新构建']))
+    if profile=='quick' and report['feature_coverage']['missing_enrichment']:
+        report['pending_items']=sorted(set(report.get('pending_items',[])+['快速档：部分精读项未生成，详见 missing_enrichment，补齐后跑 --profile full 重新构建']))
     verify_template(Path(__file__).resolve().parents[1]);resources=[]
     assets=Path(__file__).resolve().parents[1]/'assets'
     for key,filename in [('dictionary','offline-dictionary.json'),('legacy_dictionary','legacy-dictionary.json')]:
@@ -194,9 +195,13 @@ def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='
         assert not re.match(r'^[a-zA-Z]+://',value),'Use local resource files'
         path=(src.parent/value).resolve();assert path.is_file(),f'Missing media: {value}';return path
     planned=[]
+    audio_sources={}
     def media(obj,key,folder,stem):
         if not obj.get(key):return
         source=source_path(obj[key]);name=f'{folder}/{stem}{source.suffix.lower()}'
+        if folder=='audio':
+            if source in audio_sources:obj[key]=audio_sources[source];return
+            audio_sources[source]=name
         planned.append((source,name));obj[key]=name;resources.append(name)
     probe_cache={}
     def duration_of(source,required=True):
@@ -265,7 +270,7 @@ if __name__=='__main__':
     p.add_argument('--source-ledger');p.add_argument('--audio-bundle');p.add_argument('--answer-key')
     p.add_argument('--profile',choices=['full','quick'],default='full',help='quick=先出可上课版，精读项后补')
     p.add_argument('--sections',default='all',help='all 或逗号分隔的题型/章节ID，如 reading,A,L6')
-    p.add_argument('--mode',choices=['lesson','intensive'],default='lesson')
+    p.add_argument('--mode',choices=['lesson','intensive'])
     p.add_argument('--audio-mode',choices=['embedded','folder'],default='embedded')
     a=p.parse_args()
     try:build(a.input,a.out,a.source_ledger,a.audio_bundle,a.answer_key,a.profile,a.sections,a.mode,a.audio_mode)

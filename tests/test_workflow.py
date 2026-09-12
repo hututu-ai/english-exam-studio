@@ -37,6 +37,31 @@ class Workflow(unittest.TestCase):
         self.assertEqual(len(scope.select(d,'B')['sections']),1)
         with self.assertRaises(ValueError):scope.select(d,'C')
         with self.assertRaises(ValueError):scope.select(d,'A','intensive')
+        with self.assertRaises(ValueError):scope.select(d,'all,TYPO')
+        d['sections'][0]['kind']='listening'
+        chosen=scope.select(d,'A','intensive')
+        self.assertEqual(scope.select(chosen)['generation_scope']['mode'],'intensive')
+
+    def test_doctor_requires_runnable_probe_and_mp3(self):
+        for probe_ok,mp3,asr_ok,expected in [(False,True,True,'no_ffmpeg'),(True,False,True,'no_ffmpeg'),(True,True,False,'silence_only'),(True,True,True,'full_auto')]:
+            output=io.StringIO()
+            with patch.object(sys,'argv',['doctor.py','--json']),patch.object(doctor,'tool',side_effect=lambda *names:names[0]),patch.object(doctor,'find_models',return_value=[{'path':'ggml-base.bin','size_gb':.15}]),patch.object(doctor,'first_line',side_effect=['ffmpeg version test','ffprobe version test' if probe_ok else '', 'usage: whisper' if asr_ok else '']),patch.object(doctor,'full_output',return_value='libmp3lame' if mp3 else 'aac'),contextlib.redirect_stdout(output):
+                doctor.main()
+            self.assertEqual(json.loads(output.getvalue())['capability'],expected)
+
+    def test_scope_keeps_expected_coverage_and_skips_unselected_invalid_section(self):
+        d=copy.deepcopy(self.exam)
+        d['expected_question_ids']=['21','22','23']
+        self.assertEqual(scope.select(d)['expected_question_ids'],['21','22','23'])
+        d=copy.deepcopy(self.exam)
+        d['sections'].append({'id':'L1','kind':'listening','title':'未选中且未编写的听力','questions':[]})
+        d['full_audio']='not-provided.mp3'
+        source=self.base/'exam.json';write(source,d)
+        ledger={'sources':[{'role':'original_demo','path':source.name,'sha256':hashlib.sha256(source.read_bytes()).hexdigest()}],'sections':d['sections']}
+        ledger_path=self.base/'source-ledger.json';write(ledger_path,ledger)
+        with contextlib.redirect_stdout(io.StringIO()):
+            build.build(source,self.base/'reading-only',ledger_path,selection='A')
+        self.assertEqual(verify_output(self.base/'reading-only')['status'],'passed')
 
     def test_dependency_timeout_and_explicit_tool(self):
         code,out,err=bounded_command.run([sys.executable,'-c','import time; time.sleep(10)'],.2)
@@ -77,6 +102,7 @@ class Workflow(unittest.TestCase):
             self.assertEqual(';base64,' in html.split('<script id="examData"')[1].split('</script>')[0],mode=='embedded')
             report=json.loads((out/'build-report.json').read_text(encoding='utf-8'))
             self.assertEqual(report['audio_embedded'],mode=='embedded')
+            self.assertEqual(report['audio_delivery']['external_audio_count'],1)
             if mode=='embedded':
                 (out/'audio/full.wav').write_bytes(b'corrupted')
                 with self.assertRaises(ValueError):verify_output(out)
