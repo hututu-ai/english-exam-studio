@@ -8,6 +8,10 @@
 
 [**下载 Skill 安装包**](https://github.com/hututu-ai/english-exam-studio/releases/latest/download/english-exam-studio.zip) · [查看最新版本](https://github.com/hututu-ai/english-exam-studio/releases/latest) · [常见问题](docs/FAQ.md) · [反馈问题](https://github.com/hututu-ai/english-exam-studio/issues)
 
+## 1.0.10：导航只保留六类入口
+
+顶部仅显示听力、阅读、七选五、完形、语法填空、写作。悬停或点击某个入口，下方展开对应章节；手机点击展开。听力 1–10 与阅读 A–D 均收进子菜单。
+
 ## 1.0.9：速对答案按大板块聚合
 
 速对答案只保留「全部／按板块」两种方式；听力、阅读、七选五、完形填空、语法填空各自汇总。打开即看答案，去除重复篇名，保留按需遮盖和返回讲评。
