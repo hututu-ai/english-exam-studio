@@ -41,7 +41,14 @@ jobs:
         with:
           node-version: '22'
       - run: npm install --no-save --no-package-lock playwright@1.62.1
-      - run: npx playwright install --with-deps ${{ matrix.engine }}
+      - if: runner.os != 'Windows'
+        run: npx playwright install --with-deps ${{ matrix.engine }}
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $examEdge = Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'
+          if (!(Test-Path $examEdge)) { throw 'Runner Edge executable missing' }
+          "CHROME_BIN=$examEdge" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - run: python tests/make_browser_fixture.py work/browser-input work/browser-output
       - run: node scripts/browser_check.cjs work/browser-output --stress
         env:

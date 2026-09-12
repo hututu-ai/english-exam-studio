@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
 import build
+from platform_tools import force_utf8
 
 def make(base, output):
     base=Path(base).resolve();base.mkdir(parents=True,exist_ok=True)
@@ -33,4 +34,5 @@ def make(base, output):
     source=base/'exam.json';source.write_text(json.dumps(d,ensure_ascii=False),encoding='utf-8')
     ledger=base/'source-ledger.json';ledger.write_text(json.dumps({'sources':[{'role':'original_demo','path':'exam.json','sha256':hashlib.sha256(source.read_bytes()).hexdigest()}],'sections':d['sections']}),encoding='utf-8')
     build.build(source,Path(output),ledger)
-if __name__=='__main__':make(sys.argv[1],sys.argv[2])
+if __name__=='__main__':
+    force_utf8();make(sys.argv[1],sys.argv[2])

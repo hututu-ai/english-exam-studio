@@ -114,6 +114,7 @@ class Workflow(unittest.TestCase):
         d=copy.deepcopy(self.exam);s=d['sections'][0];s['kind']='listening';s['id']='L1'
         s['audio_scope']='full_paper';s['audio_alignment']={'mode':'unsegmented'}
         s['audio']=wav.name;d['full_audio']=wav.name
+        s['questions'][0].update(audio=wav.name,audio_context={'start':0,'end':2,'selection_reason':'Synthetic PCM fixture'})
         s['blanks']=[{'paragraph_id':s['paragraphs'][0]['id'],'start':0,'end':2,'purpose':'测试','question_ids':['21']}]
         d['dictionary']={};source=self.base/'exam.json';write(source,d)
         ledger={'sources':[{'role':'original_demo','path':source.name,'sha256':hashlib.sha256(source.read_bytes()).hexdigest()}],'sections':d['sections']}
@@ -131,6 +132,10 @@ class Workflow(unittest.TestCase):
             if mode=='embedded':
                 (out/'audio/full.wav').write_bytes(b'corrupted')
                 with self.assertRaises(ValueError):verify_output(out)
+
+        wav.write_bytes(wav.read_bytes()[:-100])
+        with patch.object(build,'find_tool',return_value=None),self.assertRaisesRegex(ValueError,'WAV 数据被截断'):
+            build.build(source,self.base/'truncated-wav',ledger_path)
 
     def test_external_transcript_skips_asr(self):
         source=self.base/'input.mp3';source.write_bytes(b'fixture')

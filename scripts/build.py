@@ -4,7 +4,7 @@
 Audio is wired automatically from an audio bundle (audio.py output) so no one has to keep the
 file names in sync by hand: --audio-bundle DIR, or auto-detected audio-work / audio-out.
 """
-import argparse,base64,copy,json,re,shutil,subprocess,time,mimetypes
+import argparse,base64,copy,json,re,shutil,subprocess,time,mimetypes,wave
 from pathlib import Path
 from audio_wiring import bundle_dir, wire_audio
 from verify_output import verify_output, verify_template
@@ -211,6 +211,19 @@ def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='
     def duration_of(source,required=True):
         key=str(source.resolve())
         if key in probe_cache:return probe_cache[key]
+        # PCM WAV has a standard-library decoder; inspect actual frames, not a guessed duration.
+        if source.suffix.lower()=='.wav':
+            try:
+                with wave.open(key,'rb') as wav:
+                    rate=wav.getframerate();frames=wav.getnframes();frame_size=wav.getnchannels()*wav.getsampwidth();remaining=frames
+                    while remaining:
+                        block=wav.readframes(min(remaining,65536))
+                        if not block or len(block)%frame_size:raise ValueError('WAV 数据被截断：'+key)
+                        remaining-=len(block)//frame_size
+                    if rate<=0 or frames<=0:raise ValueError('WAV 音频为空：'+key)
+                    probe_cache[key]=frames/rate;return probe_cache[key]
+            except (wave.Error,EOFError):
+                pass  # Other WAV codecs still require ffprobe.
         exe=find_tool('ffprobe')
         if not exe:
             if required:raise ValueError('验证分段时长需要 ffprobe；未分段原音可不依赖 ffprobe')
