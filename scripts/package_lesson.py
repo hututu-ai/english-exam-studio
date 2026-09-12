@@ -8,11 +8,11 @@ from platform_tools import force_utf8
 def package(output, destination, allow_unchecked=False):
     out=Path(output).resolve();dest=Path(destination).resolve()
     if dest==out or out in dest.parents:raise ValueError('ZIP 必须放在输出文件夹外，避免递归打包')
-    verify_output(out)
+    verified=verify_output(out)
     digest=hashlib.sha256((out/'index.html').read_bytes()).hexdigest()
     evidence=out/'browser-check.json'
     report=json.loads(evidence.read_text(encoding='utf-8')) if evidence.exists() else {}
-    passed=report.get('status')=='passed' and report.get('html_sha256')==digest and bool(report.get('checks')) and all(isinstance(c,dict) and c.get('status')=='passed' for c in report['checks']) and not report.get('errors') and bool(report.get('engine'))
+    passed=report.get('status')=='passed' and report.get('html_sha256')==digest and bool(report.get('checks')) and all(isinstance(c,dict) and c.get('status')=='passed' for c in report['checks']) and not report.get('errors') and bool(report.get('engine')) and report.get('media_sha256',{})==verified['resource_sha256']
     if not passed and not allow_unchecked:raise ValueError('缺少与当前 HTML 对应的浏览器点击验收；先运行 browser_check.cjs 或宿主浏览器验收。无法验收时只可用 --allow-unchecked 交付待验收版')
     status='browser_checked' if passed else 'preview_only_browser_check_pending'
     (out/'delivery-report.json').write_text(json.dumps({'status':status,'html_sha256':digest,'browser_report':'browser-check.json' if passed else None,'scope':'Checks apply only to this artifact; teaching accuracy and exact audio boundaries require source review.'},ensure_ascii=False,indent=2),encoding='utf-8')

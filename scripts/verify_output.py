@@ -51,7 +51,16 @@ def verify_output(output,skill_root=None):
         if name not in paths or ';base64,' not in value:raise ValueError('Unexpected embedded audio')
         binary=base64.b64decode(value.split(';base64,',1)[1],validate=True)
         if binary!=(out/name).read_bytes():raise ValueError('Embedded audio differs from packaged file: '+name)
-    return {'status':'passed','comparison':method,'template_version':manifest['template_version'],'template_sha256':manifest['template_sha256'],'html_sha256':hashlib.sha256(html.encode()).hexdigest(),'ignored_host_attributes':['data-page-node-id'] if method!='exact' else [],'scope':'Template code and embedded-data verification only. Not an answer, audio-alignment or teaching-quality certificate.'}
+    resources=set(paths)
+    for section in data['sections']:
+        if section.get('origin',{}).get('page_image'):resources.add(section['origin']['page_image'])
+        resources.update(p['image'] for p in section.get('paragraphs',[]) if p.get('image'))
+    fingerprints={}
+    for name in sorted(resources):
+        file=(out/name).resolve()
+        if out.resolve() not in file.parents or not file.is_file() or file.stat().st_size==0:raise ValueError('Missing or invalid packaged media: '+name)
+        fingerprints[name]=hashlib.sha256(file.read_bytes()).hexdigest()
+    return {'resource_sha256':fingerprints,'status':'passed','comparison':method,'template_version':manifest['template_version'],'template_sha256':manifest['template_sha256'],'html_sha256':hashlib.sha256(html.encode()).hexdigest(),'ignored_host_attributes':['data-page-node-id'] if method!='exact' else [],'scope':'Template code and embedded-data verification only. Not an answer, audio-alignment or teaching-quality certificate.'}
 if __name__=='__main__':
     force_utf8()
     p=argparse.ArgumentParser();p.add_argument('output');a=p.parse_args()

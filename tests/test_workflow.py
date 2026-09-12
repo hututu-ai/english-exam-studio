@@ -129,6 +129,14 @@ class Workflow(unittest.TestCase):
             report=json.loads((out/'build-report.json').read_text(encoding='utf-8'))
             self.assertEqual(report['audio_embedded'],mode=='embedded')
             self.assertEqual(report['audio_delivery']['external_audio_count'],1)
+            if mode=='folder':
+                digest=hashlib.sha256((out/'index.html').read_bytes()).hexdigest()
+                write(out/'browser-check.json',{'status':'passed','engine':'unit-test-fixture','html_sha256':digest,'media_sha256':verify_output(out)['resource_sha256'],'checks':[{'status':'passed'}]})
+                package(out,self.base/'folder.zip')
+                (out/'audio/full.wav').write_bytes(b'changed after browser check')
+                with self.assertRaisesRegex(ValueError,'浏览器'):package(out,self.base/'changed.zip')
+                (out/'audio/full.wav').unlink()
+                with self.assertRaises(ValueError):verify_output(out)
             if mode=='embedded':
                 (out/'audio/full.wav').write_bytes(b'corrupted')
                 with self.assertRaises(ValueError):verify_output(out)
