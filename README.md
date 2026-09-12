@@ -8,6 +8,10 @@
 
 [**下载 Skill 安装包**](https://github.com/hututu-ai/english-exam-studio/releases/latest/download/english-exam-studio.zip) · [查看最新版本](https://github.com/hututu-ai/english-exam-studio/releases/latest) · [常见问题](docs/FAQ.md) · [反馈问题](https://github.com/hututu-ai/english-exam-studio/issues)
 
+## 1.0.8：顶部导航与清晰字号调节
+
+教学工具和章节导航分为上下两行，原文与题目用满页面宽度。主题旁新增带当前数值的字号控件：可直接选择 18–34，或用 A−／A＋微调，立即记住设置；电脑与手机都可使用。阅读 A–D 在阅读入口展开，避免整排长标题挤压工具。
+
 ## 1.0.7：逐项复查与修复
 
 在 1.0.6 的基础上补修：精听选择在二次构建时继续保留；同一段原音只嵌入一次；环境检查实际运行 FFmpeg、FFprobe 与转写程序；手机窄屏也能打开速对答案。技能快捷入口、安装教程和正文都统一为先确认范围。
