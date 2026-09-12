@@ -17,5 +17,5 @@ with zipfile.ZipFile(a.input) as z:
     for name in z.namelist():
         if name.startswith('word/media/') and not name.endswith('/'):
             target=out/'images'/Path(name).name;target.parent.mkdir(exist_ok=True);target.write_bytes(z.read(name));images.append(str(target.relative_to(out)))
-    (out/'extracted.json').write_text(json.dumps({'blocks':blocks,'images':images,'note':'Verify images, layout, underlines and OCR against source.'},ensure_ascii=False,indent=2))
+    (out/'extracted.json').write_text(json.dumps({'blocks':blocks,'images':images,'note':'Verify images, layout, underlines and OCR against source.'},ensure_ascii=False,indent=2),encoding='utf-8')
     print(f'{len(blocks)} blocks; {len(images)} images extracted')
