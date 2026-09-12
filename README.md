@@ -114,6 +114,22 @@ https://github.com/hututu-ai/english-exam-studio
 
 </details>
 
+### 已经装过旧版，怎么更新？
+
+Skill 是你电脑上的文件夹，不会像手机 App 那样自己升级，需要在发布新版本后手动换一次。当前最新版本是 **1.3.2**（听力一定接入、答案可溯源、Windows 与手机可用、生成更快）。
+
+更新前先备份你现在的技能目录，再选一种方式：
+
+- **让助手更新（推荐）**：把下面这段发给你的助手。
+
+  ```text
+  请把 english-exam-studio Skill 更新到最新版：先备份我当前的技能目录，再从 https://github.com/hututu-ai/english-exam-studio/releases/latest 下载最新的 english-exam-studio.zip，用其中的内容替换旧技能文件（保留我自己的笔记文件），更新后确认 VERSION 已变成新版本号并运行 scripts/doctor.py 检查环境，最后告诉我版本变化。
+  ```
+
+- **自己更新**：点击上方 **下载 Skill 安装包**，在你的 Agent 的已安装技能里覆盖导入这个 ZIP；手动安装的则替换旧文件夹中的同名文件。
+
+更新后，之前生成的课件照常打开，浏览器里的课堂记录也不受影响；你改过的 `SKILL.md`、模板或脚本会被新版覆盖，所以个性化调整要先备份，或让助手把它们重新应用一次。完整步骤、各平台注意事项与更新后自检见 [docs/UPDATE.md](docs/UPDATE.md)。
+
 ## 第二步：准备自己的三类材料
 
 | 材料 | 可以提供什么 | 提交时注意什么 |

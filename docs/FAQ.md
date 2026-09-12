@@ -121,4 +121,12 @@ WorkBuddy 官方提供本地技能包导入入口，但本项目尚未完成该�
 
 截图和附件先去掉学生姓名、成绩、账号、密钥和私人路径。无需把整份考试材料公开上传；可以用能复现问题的简短自写材料或局部说明。功能建议尽量描述真实课堂情境，便于判断应新增、合并还是简化入口。
 
+## 我装的是旧版，怎么更新？
+
+Skill 是电脑上的文件夹，不会自动升级，需要发布新版本后手动换一次。当前最新版本是 **1.3.2**。
+
+最省事的做法是让助手更新：把「请把 english-exam-studio 更新到最新版：先备份我当前的技能目录，再从 https://github.com/hututu-ai/english-exam-studio/releases/latest 下载最新 ZIP 替换旧文件并保留我的笔记文件，最后告诉我版本变化」发给它就够了。也可以自己从 [最新版本](https://github.com/hututu-ai/english-exam-studio/releases/latest) 下载 `english-exam-studio.zip`，在平台的已安装技能里覆盖导入。
+
+更新前请备份技能目录。更新不会影响你已经生成的课件，课堂记录也存在浏览器里，与 Skill 版本无关；但你自己改过的 `SKILL.md`、模板或脚本会被新版覆盖。完整步骤见 [UPDATE.md](UPDATE.md)。想确认自己是哪个版本，看技能目录里的 `VERSION`，或让助手运行 `scripts/check_update.py`。
+
 [返回项目首页](../README.md) · [第一次安装与环境准备](SETUP.md)
