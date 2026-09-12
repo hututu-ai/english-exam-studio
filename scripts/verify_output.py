@@ -3,6 +3,7 @@
 import argparse,hashlib,json,re
 from pathlib import Path
 from html.parser import HTMLParser
+from platform_tools import force_utf8
 
 class Markup(HTMLParser):
     def __init__(self):super().__init__(convert_charrefs=False);self.events=[];self.raw=0
@@ -42,6 +43,7 @@ def verify_output(output,skill_root=None):
     if json.loads(payload)!=json.loads((out/'exam.json').read_text()):raise ValueError('Embedded exam data differs from exam.json')
     return {'status':'passed','comparison':method,'template_version':manifest['template_version'],'template_sha256':manifest['template_sha256'],'html_sha256':hashlib.sha256(html.encode()).hexdigest(),'ignored_host_attributes':['data-page-node-id'] if method!='exact' else [],'scope':'Template code and embedded-data verification only. Not an answer, audio-alignment or teaching-quality certificate.'}
 if __name__=='__main__':
+    force_utf8()
     p=argparse.ArgumentParser();p.add_argument('output');a=p.parse_args()
     try:print(json.dumps(verify_output(a.output),ensure_ascii=False))
     except (ValueError,KeyError,FileNotFoundError) as e:p.exit(1,'ERROR: '+str(e)+'\n')

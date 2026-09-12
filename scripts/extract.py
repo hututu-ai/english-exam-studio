@@ -2,6 +2,8 @@
 """DOCX extraction preserving block order; images kept for visual checking."""
 import argparse,json,zipfile,xml.etree.ElementTree as ET
 from pathlib import Path
+from platform_tools import force_utf8
+force_utf8()
 p=argparse.ArgumentParser();p.add_argument('input');p.add_argument('out');a=p.parse_args()
 out=Path(a.out);out.mkdir(parents=True,exist_ok=True)
 ns={'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}

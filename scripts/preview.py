@@ -5,6 +5,7 @@ import os
 import re
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from platform_tools import force_utf8
 
 
 class RangeHandler(SimpleHTTPRequestHandler):
@@ -48,25 +49,36 @@ class RangeHandler(SimpleHTTPRequestHandler):
         return f
 
     def copyfile(self, source, outputfile):
-        if self.byte_range is None:
-            return super().copyfile(source, outputfile)
-        left = self.byte_range[1] - self.byte_range[0] + 1
-        while left:
-            chunk = source.read(min(65536, left))
-            if not chunk:
-                break
-            outputfile.write(chunk)
-            left -= len(chunk)
+        try:
+            if self.byte_range is None:
+                return super().copyfile(source, outputfile)
+            left = self.byte_range[1] - self.byte_range[0] + 1
+            while left:
+                chunk = source.read(min(65536, left))
+                if not chunk:
+                    break
+                outputfile.write(chunk)
+                left -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # 浏览器提前断开（暂停音频、切页）属于正常现象，不打印堆栈
+
+    def handle_one_request(self):
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
 
     def log_message(self, fmt, *args):
         pass
 
 
 if __name__ == '__main__':
+    force_utf8()
     parser = argparse.ArgumentParser()
     parser.add_argument('directory')
     parser.add_argument('--port', type=int, default=8918)
     args = parser.parse_args()
     server = ThreadingHTTPServer(('127.0.0.1', args.port), partial(RangeHandler, directory=os.path.abspath(args.directory)))
     print(f'Preview: http://127.0.0.1:{args.port}/', flush=True)
+    print('（Windows 首次运行如弹出防火墙提示，允许“专用网络”访问即可；本服务只监听本机地址。）', flush=True)
     server.serve_forever()

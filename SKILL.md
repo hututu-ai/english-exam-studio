@@ -1,6 +1,6 @@
 ---
 name: english-exam-studio
-description: 将英语试卷、参考答案与听力音频制作成可离线使用的互动 HTML 讲评课件。用于英语讲试卷、阅读讲评、听力自动切段与挖空精听，覆盖阅读、七选五、完形、语法填空和写作。
+description: 将英语试卷、参考答案与听力音频制作成可离线使用的互动 HTML 讲评课件。用于英语讲试卷、阅读讲评、听力自动接入选段与挖空精听，覆盖阅读、七选五、完形、语法填空和写作；内置答案原件溯源核对（answers.json + source-ledger + 逐题审计）与听力三档降级接入，音频缺失或答案对不上时构建直接报错。
 ---
 
 # 英语实战讲评 Skill
@@ -9,7 +9,52 @@ description: 将英语试卷、参考答案与听力音频制作成可离线使�
 
 ## 原件与交付检查（必读）
 
-生成前先读取 [原件核对与交付门槛](references/source-verification.md)。先从原卷与答案建立独立 source-ledger.json，再写教学解析；构建必须通过 quality_gate.py。该步骤由 Agent 完成，不要求老师手工整理JSON。失败要修复源问题，不降低检查要求。模板/结构通过不能作为答案与音频正确的证明。
+生成前先读取 [原件核对与交付门槛](references/source-verification.md)。先从原卷与答案建立独立 source-ledger.json，再写教学解析；构建必须通过 quality_gate.py、answer_audit.py 与 verify_output.py。该步骤由 Agent 完成，不要求老师手工整理JSON。失败要修复源问题，不降低检查要求。模板/结构通过不能作为答案与音频正确的证明。
+
+## 开工前自检与时间预算（先做这一步）
+
+```bash
+python3 scripts/doctor.py --minutes 已知听力时长
+```
+
+十秒内给出结论：ffmpeg/ffprobe/whisper-cli 与本地模型是否存在、PDF 与 OCR 工具是否可用、建议并发数、粗估转写耗时，以及本次该走哪一档听力方案。命令缺失时按输出给出的替代路径继续做成品，不要停在安装依赖上：任何联网安装、模型下载超过约 2 分钟就改走降级方案，并如实说明未做的那一项。默认节奏是**先出一份能上课的完整课件，再增强**：材料识别 → 内容与答案 → 构建 → 浏览器验收，中途任何一步失败都先报告已完成到什么程度，不让流程静默卡住。
+
+省时间的三个默认做法：用 `scripts/scaffold.py` 把原卷文字和答案一次性搬进台账与 exam.json 骨架，只有教学解析需要自己写；听力分段用并发与复用（见第二节）；改一处内容只重跑构建，不重做识别与转写。
+
+### 生成速度：五个立刻见效的做法
+
+按收益从大到小用，不要跳过第一条。
+
+1. **先跑自检再动手**（约十秒）：doctor 直接决定走完整分段、静音分段还是整卷原音，避免在一个注定失败的依赖上耗时间；缺依赖时按它给的替代路径继续出成品。
+2. **试卷自带听力原文时跳过 ASR**：很多答案册附有听力原文，此时不需要转写——`analyze --no-asr` 拿静音候选块，用原文首尾句写切段清单，`cut --allow-unverified` 生成音频（页面标"边界待核对"）。省掉整段转写，通常省 2–5 分钟。只有试卷没给原文、或静音边界对不上题意时才跑 ASR；跑 ASR 时先用 base 定边界，个别 Text 不确定再单独换大模型复核。
+3. **分节并行写作**：`python3 scripts/parts.py split WORK/exam.json --out WORK/parts` 把整卷拆成每节一个文件（`parts/L1.json`…），多个 worker 可以同时写不同节，写完 `parts.py merge WORK/parts --out WORK/exam.json` 合并，合并前先 `parts.py check`。单节文件还有个好处：返工只改一小块，不用重写整个大 JSON。
+4. **长句引用只写字符范围**：把引文写成 `{"paragraph_id":"A-p2","quote_ref":[120,158]}`（或 `source_quote_ref`），再用 `python3 scripts/quotes.py fill WORK/exam.json` 自动填成逐字引文。少打几百字引文，也不会因为一个字不一致反复构建失败；`quotes.py check` 能一次性列出所有对不上的引文。
+5. **一轮改完所有校验错误**：构建现在会把全部问题一次性列出来（每条带 section 与题号，形如 `共 6 处问题：L1/2: Answer absent from options`），不再改一个跑一遍。看到清单就一次全改完，再重跑构建。
+
+**快速档与完整档**：`python3 scripts/build.py ... --profile quick` 只要求讲课必需项——逐题解析（题型/解法/易错/证据/干扰项/方法）、答案与答案出处、听力音频或说明与精听挖空、证据段落译文、至少一层词句；句子精讲、篇章结构、写作积累可以后补。报告里会列明 `missing_enrichment` 与 `delivery_status=quick_profile_...`，页面只显示已写好的内容。默认 `full` 要求齐全。用快速档时必须告诉老师"这是快速档、精读项未生成"，补齐字段后用 `--profile full` 重跑即可。
+
+## 跨平台与手机打开（Windows 老师同样可用）
+
+读取 [Windows 与手机适配](references/platforms.md)。脚本在 Windows / macOS / Linux 上同一套代码：可执行文件按 `whisper-cli(.exe)`、`whisper(.exe)`、`main(.exe)` 依次查找，控制台强制 UTF-8 输出（避免中文报错在 cp936/cp1252 上崩掉），跨盘符路径自动退回绝对路径。Windows 上需要用 winget/scoop/choco 装 ffmpeg，转写用 whisper.cpp；没有转写环境就按第二节的三档降级，不要卡在安装上。
+
+成品在手机上的两个真实坑要主动避免：一是只把 `index.html` 单独发到手机，`audio/` 与 `assets/` 没跟过去，听力必然播放不了；二是用微信内置浏览器打开本地 HTML，容易白屏或显示成源码。模板已加兼容层（补齐 `Array.at`、`matchAll`、`flatMap`、`Object.fromEntries`、`dialog.showModal`，隐藏未打开的弹窗，脚本没跑起来时显示中文提示而不是空白页），交付说明里要写清：整个文件夹一起拷贝、用系统浏览器打开、微信里选「用其他应用打开」、投屏上课建议用电脑。
+
+## 答案真实性：三层证据链
+
+真实性靠可追溯，不靠反复朗读。链条是：**答案原件 → answers.json（脚本解析，不由人录入）→ source-ledger.json（逐题登记页码/位置）→ exam.json → 构建时三方比对**。
+
+```bash
+python3 scripts/answers.py extract WORK/答案原件.docx --out WORK/answers.json
+python3 scripts/answers.py check WORK/answers.json --ledger WORK/source-ledger.json
+python3 scripts/answer_audit.py WORK/exam.json --ledger WORK/source-ledger.json --answer-key WORK/answers.json --report WORK/answer-audit.json
+```
+
+规则：
+- `answer_status=official` 只能来自答案原件解析表里存在的题号；解析表缺失该题、或成品与原件不一致，构建直接阻断。原始答案文件必须是 `role=answers` 且带SHA256。
+- 逐题还要独立复核：正确选项文字与证据句必须有共同实词；完全对不上就说明答案或证据有一个错。这类判断进入 answer-audit.json 的 review 清单，必须在 qa-report.md 逐条写出结论，不能默认通过。
+- 官方答案与原文证据冲突时保留冲突，写明两种可能，不替选项编理由；解析表里出现两个不同答案的行会被列进 unparsed，逐行回原件确认。
+- 主观题按 sample 处理，不冒称官方评分标准；推定答案用 inferred，写清推理依据和不确定范围。
+- 生成答案表后不要手工改写它；解析器识别不到的格式就换一份可读的答案原件或修正解析，答案本身以原件为准。
 
 ## 输入与依据
 
@@ -20,6 +65,7 @@ description: 将英语试卷、参考答案与听力音频制作成可离线使�
 - 试卷照片逐页识别，检查漏页、重号、裁切。
 - 没有听力就完成其他题型并说明缺项；无答案可给有依据的“推定答案”，不得冒称官方答案。
 - 输入完整时直接执行，不让用户先写 JSON 或手工切音频。
+- 老师给了听力音频就一定要在成品里能播：按第二节三档方案接入，禁止因为转写工具不可用而把听力章节删掉或留一个点不动的播放器。
 
 ## 使用者与教学边界
 
@@ -53,11 +99,23 @@ description: 将英语试卷、参考答案与听力音频制作成可离线使�
 有音频时读取 [听力流程](references/listening.md)。先分析，智能体结合转写、题号提示、题意、停顿生成清单，再精确裁剪。
 
 ```bash
-python3 scripts/audio.py analyze INPUT_AUDIO --out WORK_AUDIO --model WHISPER_MODEL
-python3 scripts/audio.py cut INPUT_AUDIO --manifest SEGMENTS_JSON --out OUTPUT_AUDIO
+python3 scripts/doctor.py --minutes 听力时长
+python3 scripts/audio.py analyze INPUT_AUDIO --out WORK_AUDIO --model WHISPER_MODEL --jobs 4 --threads 5
+python3 scripts/audio.py cut INPUT_AUDIO --manifest SEGMENTS_JSON --out WORK_AUDIO --transcript WORK_AUDIO/transcript.json
+python3 scripts/audio.py cut INPUT_AUDIO --manifest QUESTIONS_JSON --out WORK_AUDIO/questions --transcript WORK_AUDIO/transcript.json
 ```
 
-命令路径相对本 Skill。analyze 可用 --transcript 复用带秒级时间的 JSON；否则调用本地 whisper-cli。静音与题号识别仅是候选，智能体核对首尾及题号对应后设置 verified=true。可自动核对时不转嫁给用户；低置信度先重听／局部重转写。
+命令路径相对本 Skill。`--jobs` 把原音按真实静音切成几片并行转写（长录音明显更快），`--threads` 控制单进程线程；`--reuse` 在同一目录直接复用已有转写，`--resume` 只补做缺失或时长不符的片段；`--transcript` 让裁剪时同步校验首尾引句，引句对不上立刻报错，不回听不改音频。GPU 后端崩溃的机器（容器、无显卡、沙箱）会自动改用 CPU 重跑一次并记录 device，不必人工排查；仍然失败就换三档降级。
+
+### 听力三档接入（按 doctor 结论选，成品必须有能播的听力）
+
+1. **完整自动分段**：有 ffmpeg + 可用转写时，每个 Text 一个分段音频、每题一个小播放器，边界 verified=true。
+2. **静音自动分段**：只有 ffmpeg 没有可用转写时，`analyze --no-asr` 给出静音候选块，人工确认后 `cut --allow-unverified` 生成音频，verification_mode=auto_silence。页面标“边界待核对”，qa-report.md 逐段写试听结果；不许因为没转写就砍掉听力。
+3. **整卷原音**：连 ffmpeg 都没有时，把老师给的音频直接写进 exam.json 的 `full_audio`，构建会原样复制到 `audio/` 并接到每个听力章节，页面标“整卷原音（未分段）”，说明逐题复听需人工拖动。
+
+老师确实没给音频时，用 `audio_note` 写明缺项，页面会显示这行说明；绝不留一个点不动的播放器，也不静默少一个章节。
+
+构建时音频路径由 `--audio-bundle`（或自动识别的 audio-work/audio-out）注入，不需要手抄 `audio/L1.mp3` 这类路径；分段清单、转写与完整原音靠 SHA256 互相绑定，串了文件会直接报错。静音与题号识别仅是候选，智能体核对首尾及题号对应后设置 verified=true。可自动核对时不转嫁给用户；低置信度先重听／局部重转写。
 
 常见卷为 10 段、20 题，以原卷为准。重复两遍属于同一 Text；默认保留一次完整正文用于精听，完整音频保留原样。不要均分，不把读题时间或第二遍误认新材料，不删句中停顿，不默认降噪或变速。
 
@@ -68,10 +126,10 @@ python3 scripts/audio.py cut INPUT_AUDIO --manifest SEGMENTS_JSON --out OUTPUT_A
 ## 三、构建和验收
 
 ```bash
-python3 scripts/build.py EXAM_JSON OUTPUT_DIRECTORY --source-ledger SOURCE_LEDGER_JSON
+python3 scripts/build.py EXAM_JSON OUTPUT_DIRECTORY --source-ledger SOURCE_LEDGER_JSON --audio-bundle WORK_AUDIO
 ```
 
-输出 index.html、exam.json、本地 audio/ 与 assets/、build-report.json。脚本复制资源并重写相对地址，双击可用，移动整个文件夹仍可用。ECDICT许可随成品复制。关键释义、译文、解析内置，不依赖 CDN 或在线字典。浏览器 TTS 可选，并与原卷听力区分。
+输出 index.html、exam.json、本地 audio/ 与 assets/、build-report.json、answer-audit.json。脚本自动接线音频、复制资源并重写相对地址，双击可用，移动整个文件夹仍可用；听力分段、逐题录音、整卷原音三种状态都在报告里写明。ECDICT许可随成品复制。关键释义、译文、解析内置，不依赖 CDN 或在线字典。浏览器 TTS 可选，并与原卷听力区分。
 
 模板有右侧全卷导航、前后题、选择、逐题显答、证据定位、完整／Text／逐题音频互斥、倍速、挖空、阅读精讲、打印与字号。每段独立保存课堂状态，切段暂停音频，重置当前段隐藏答案。收起原文仅改变其可见性，不清除已讲答案；“重置本节”才清除该节选择、显答、排除和线索。播放不自动展开原文。切换原文或挖空不打断正在播放的录音。完整录音放在听力更多菜单的独立窗口，课堂工具保留倒计时、积分，并提供待复讲题目清单和随机抽号。支持证据复听1/2/3次、可靠对齐段落随原音定位。原文定位后可返回当前题。
 
@@ -81,9 +139,10 @@ API 是可选生成能力。见 [API接入取舍](references/api-options.md)：�
 
 在 qa-report.md 分层记录：
 1. 对照原卷检查页数、题号、选项、答案范围，逐题核对证据引文真实存在。构建校验不能证明内容正确。
-2. 每段及每道题音频核查首尾、题号对应及重复播放处理；首／中／尾段和低置信度处实际试听、核对时长。
+2. 写出 doctor 结论与本次听力档位（完整自动分段／静音自动分段／整卷原音／未提供音频），再每段及每道题核查首尾、题号对应及重复播放处理；首／中／尾段和低置信度处实际试听、核对时长。自动分段与未分段必须逐条说明补救办法。
 3. 本地HTTP预览用 `scripts/preview.py OUTPUT_DIRECTORY --port 8918`，支持音频Range请求；普通不支持Range的服务器可能导致证据重听从头播放。须验证跳到目标秒数、复听次数和结束停播，file://离线也单独测试。浏览器实际测试切换、选项、显答／隐藏、证据、挖空、重置、倍速；确认音频解码与播放、无横向溢出和运行错误。静态检查不替代交互测试。
-4. 仅整套实际产物才能称整卷完成；合成演示只证明对应功能，缺真卷听力时说明尚未做真卷全链路验收。
+4. 逐条处理 answer-audit.json 的 review 项并写结论：正确选项与证据句对不上的、完形答案分布异常的、答案来源只写“参考答案”没有页码的，都要给出核对结果或明确标为待核。
+5. 仅整套实际产物才能称整卷完成；合成演示只证明对应功能，缺真卷听力时说明尚未做真卷全链路验收。
 
 交付成品入口、可编辑数据、简短中文说明与 ZIP。用户要创建 Skill 时安装到技能目录，同时提供可迁移包与标明来源的功能演示。不要停止于提示词、空壳或只做封面。
 
@@ -125,3 +184,5 @@ API 是可选生成能力。见 [API接入取舍](references/api-options.md)：�
 ### 功能一致性是交付硬要求
 
 不得删除、替换或自行简化同款模板中的教师功能。构建同时检查 `feature_coverage`：阅读类的词句、篇章、迁移，听力精听挖空与每题录音，七选五逻辑对应，语法知识卡，写作分步讲评都必须有实际数据支撑。缺项必须补齐并重跑构建，不能留空按钮或用“以后补充”作为成品。原卷没有的题型不虚构；原卷有的题型不能删掉以绕过校验。按原卷独立列出题号与题型清单，设置 expected_question_ids，再逐项对照输出。浏览器交互验收按 references/regression.md 执行，记录实际结果；未执行不得写通过。
+
+听力是这套规则里最容易悄悄丢的一块：有音频就必须在成品里能播，三段音频状态（分段／待核对边界／整卷未分段）都要在页面和报告里写明，不能靠删掉听力章节让构建通过。答案不允许只凭印象：官方答案必须能追到答案原件的解析表与页码，追不到就用 inferred 或 unresolved，并写清待核位置。

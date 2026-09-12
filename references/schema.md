@@ -54,7 +54,16 @@ UTF-8 JSON。内容字段为纯文本，模板统一转义。所有资源使用�
 
 根full_audio为完整原音；每个listening section有独立audio。paragraph.speaker为W/M等。原文轮次按真实音频和答案文件核对。
 
+音频路径通常不用手写：`build.py --audio-bundle WORK_AUDIO`（或自动识别 audio-work/audio-out）会按 section.id 与题号从切段清单注入 `full_audio`、`section.audio`、`section.audio_duration`、`section.audio_alignment`、`question.audio`、`question.audio_duration`、`question.audio_context`。手写路径仍然支持，用于老师直接交来一段音频的情况。
+
+- `section.audio_scope`：`text`（本 Text 分段音频）或 `full_paper`（整卷原音，未分段）。整卷档页面标签为“整卷原音（未分段）”。
+- `section.audio_note`：确实没有音频时写明缺项原因，页面显示该说明；既没有 audio 也没有 audio_note 会被构建阻断。
+- `section.audio_alignment`：`{mode, boundary, full_start, full_end, opening_quote, closing_quote, transcript_file, transcript_sha256}`。`boundary` 为 `verified` 或 `auto_silence`；`auto_silence` 时页面标“边界待核对”，qa-report.md 必须逐段记录试听结果。
+- `question.audio` 可选：整卷档或未做逐题裁剪时不填，页面只显示该 Text 的播放器；填了就必须有 `audio_context.selection_reason`。
+
 section.blanks为`[{"paragraph_id":"L1-p1","start":19,"end":23,"question_ids":["1"],"purpose":"本空对应的答案依据或同义转述训练"}]`，用于听力精听。Python Unicode字符下标，右端不含，不重叠、不跨轮次，答案取原文切片。数组顺序决定逐空揭示顺序。切换挖空后，未揭示词不出现在可划选文本中；本段还有隐藏空时暂停显示该段译文。
+
+答案侧由 `answers.json` 承担：`scripts/answers.py extract 答案原件 --out answers.json` 生成 `{"answer_source","answer_source_sha256","answers":{"21":"A",...},"unparsed":[...]}`，构建与 quality_gate 会拿它逐题比对 official 答案；解析表缺题或与成品不一致即阻断。
 
 听力evidence可附start/end，paragraph可附audio_start/audio_end，均是**分段文件局部秒数**。只在实际音频对齐足够可靠时提供；有不一致时保留文本定位及整段播放。不能用均分时间、字数比例、延伸部分匹配来伪造同步。播放速度支持0.5/0.75/1/1.25/1.5，音频互斥。
 
@@ -75,6 +84,14 @@ legacy_dictionary为可选的用户自有词库、一词多义与考点笔记，
 ## 展示规则
 
 数据保持整卷完整，模板一次显示一个章节，题目区可浏览本节全部题目，也可选每次只看一题；解析默认只展开当前题。listening初始只显示题目；原文在“原文与精听”折叠栏，点解析或定位时展开。挖空为原文内的就地开关，启用后隐藏解析/正确答案颜色，题目和音频保留。取消独立课堂环节标签。右上角小型控件连接section.audio，0.5/0.75倍速保留。阅读、七选五、完形等在桌面左原文右题目，在手机原文在前；原文始终共用一份，译文在本段下独立展开。右栏仅有题目讲评、篇章精读、写作迁移；展开原文只改变栏宽，不另设页面。
+
+## 分节写作与引用（提速用）
+
+整卷 JSON 太大时不必一口气写完，也不需要手抄长引文：
+
+- `scripts/parts.py split WORK/exam.json --out WORK/parts` 拆出每节一个文件（`_meta.json` 记录全卷字段与节顺序）；`parts.py check WORK/parts` 做合并前体检；`parts.py merge WORK/parts --out WORK/exam.json` 合回整卷（保留 exam.json 里的全卷级字段如 dictionary、full_audio）。合并前请确认每节文件里的 `id` 与文件名一致。
+- 引文可以只写范围：`{"paragraph_id":"A-p2","quote_ref":[120,158]}`，或写作迁移用 `source_quote_ref`；`scripts/quotes.py fill WORK/exam.json` 会把范围替换成逐字引文（原地改写，可 `--out` 另存）。`scripts/quotes.py check WORK/exam.json` 不构建也能一次性列出所有对不上原文的引文。字符下标按 Python 规则，右端不含。
+- 构建有 `--profile quick|full`：quick 只要求讲课必需项，精读项（sentences/structure/writing_bank）可缺，报告里记 `missing_enrichment`。
 
 ## 连续阅读、来源与分层词汇
 

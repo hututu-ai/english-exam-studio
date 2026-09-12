@@ -2,13 +2,20 @@
 """Audit source fidelity and delivery blockers separately from HTML structure."""
 import argparse,hashlib,json,re,difflib,subprocess
 from pathlib import Path
+from audio_wiring import bundle_dir, wire_audio
+from platform_tools import force_utf8
 
 def digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def norm(t):return re.sub(r'\s+',' ',str(t).translate(str.maketrans({'“':'"','”':'"','‘':"'",'’':"'"}))).strip()
 def answers(v):return sorted(norm(x) for x in (v if isinstance(v,list) else [v]))
-def audit_exam(d,base,ledger_path=None):
-    base=Path(base);issues=[]
+def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
+    base=Path(base);issues=[];warnings=[]
     def add(code,location,message):issues.append({'code':code,'location':location,'message':message})
+    def warn(code,location,message):warnings.append({'code':code,'location':location,'message':message})
+    audio_report=None
+    if any(s.get('kind')=='listening' and not s.get('audio') for s in d.get('sections',[])):
+        directory=bundle_dir(base,audio_bundle)
+        if directory:audio_report=wire_audio(d,base,directory)
     secs=d.get('sections',[]);numeric=[int(q['id']) for s in secs for q in s.get('questions',[]) if str(q.get('id','')).isdigit()]
     if numeric!=sorted(numeric):add('question_order','sections','章节/题目顺序未按原卷题号递增；禁止按字符串排序 L1,L10,L2')
     ledger=None
@@ -66,7 +73,12 @@ def audit_exam(d,base,ledger_path=None):
                 if re.search(r'教师.{0,8}(快进|拖动)|自行.{0,8}(快进|定位)',ctx.get('selection_reason','')):add('manual_audio_workaround',str(q['id']),'不能让老师自行拖动来代替逐题切割')
             if len(qs)>1 and (len(same)==len(qs) or len(whole_ranges)==len(qs)):add('question_audio_cloned',sid,'本组所有题后音频均复制整段或覆盖完整Text；文件数不证明逐题切割完成')
             alignment=s.get('audio_alignment')
-            if not alignment:add('audio_alignment_missing',sid,'缺少与原音转写对应的切点、首尾原句和转写证据')
+            if not s.get('audio'):
+                if s.get('audio_note'):warn('listening_audio_not_provided',sid,'未提供听力音频：'+str(s['audio_note'])+'；HTML 会显示该说明，交付文件里要写明缺项')
+                else:add('listening_audio_absent',sid,'听力章节没有任何音频，成品里听力不会出现；按 SKILL.md 三档降级之一补齐')
+            elif not alignment:add('audio_alignment_missing',sid,'缺少与原音转写对应的切点、首尾原句和转写证据')
+            elif alignment.get('mode')=='unsegmented':
+                warn('audio_unsegmented',sid,'听力未分段：HTML 使用整卷原音并标注「整卷原音（未分段）」，逐题复听与精听挖空需人工拖动；交付说明必须写明')
             else:
                 path=base/alignment.get('transcript_file','');start=alignment.get('full_start');end=alignment.get('full_end');whole=' '.join(p.get('text','') for p in pars)
                 if not path.is_file() or digest(path)!=alignment.get('transcript_sha256'):add('audio_transcript_hash',sid,'转写证据缺失或指纹不符');continue
@@ -78,23 +90,44 @@ def audit_exam(d,base,ledger_path=None):
                 if abs(duration-(end-start))>.3:add('audio_source_duration',sid,'整段实际时长与原音切点不符')
                 tr=json.loads(path.read_text());full=base/d.get('full_audio','')
                 if not full.is_file() or tr.get('source_audio_sha256')!=digest(full):add('transcript_source_audio',sid,'转写未关联到本卷完整原音指纹')
+                boundary=alignment.get('boundary','verified')
+                if boundary=='auto_silence':warn('audio_alignment_auto_silence',sid,'切点由静音自动分段产生：qa-report.md 必须逐段记录实际试听的首尾核对结果')
                 selected=[r for r in tr.get('segments',[]) if r.get('end',0)>start and r.get('start',0)<end]
                 for key,rows in [('opening_quote',selected[:2]),('closing_quote',selected[-2:])]:
                     quote=alignment.get(key,'');spoken=' '.join(r.get('text','') for r in rows)
                     words=lambda t:re.findall('[a-z]+',t.lower())
                     a=words(quote);b=words(spoken)
                     score=max((difflib.SequenceMatcher(None,a,b[i:i+len(a)]).ratio() for i in range(max(1,len(b)-len(a)+1))),default=0)
-                    if len(a)<3 or norm(quote) not in norm(whole) or score<.65:add('audio_boundary_text',sid,'首尾原句未与实际切点转写匹配：'+key)
+                    if len(a)<3 or norm(quote) not in norm(whole) or score<.65:
+                        message='首尾原句未与实际切点转写匹配：'+key
+                        (warn if boundary=='auto_silence' else add)('audio_boundary_text',sid,message)
         if kind=='writing':
             for k in ['outline','language','model_analysis']:
                 if not isinstance(s.get('writing_steps',{}).get(k),list):add('writing_field_type',sid,'writing_steps.'+k+' 必须为数组')
-    return {'status':'blocked' if issues else 'automated_checks_passed','delivery_status':'not_ready' if issues else 'content_and_browser_review_required','errors':issues,'source_ledger_sha256':digest(ledger_path) if ledger_path.is_file() else None,'scope':'Checks source-ledger consistency and detectable defects. Does not certify that ledger transcription or teaching reasoning is correct. Never generate the ledger from completed lesson data to bypass checks.'}
+    if answer_key:
+        key_path=Path(answer_key)
+        if not key_path.is_file():add('answer_key_missing_file','sources','--answer-key 指向的文件不存在')
+        else:
+            table=json.loads(key_path.read_text());rows=table.get('answers',table)
+            official=0
+            for s in secs:
+                for q in s.get('questions',[]):
+                    if q.get('answer_status')!='official':continue
+                    official+=1;qid=str(q['id']);expected=rows.get(qid)
+                    given=q.get('answer');given=given if isinstance(given,list) else [given]
+                    given=[str(x).strip().upper() for x in given if x not in (None,'')]
+                    if expected is None:add('answer_key_entry_missing',qid,f'答案原件解析表里没有第 {qid} 题，无法证明这是官方答案')
+                    elif str(expected).strip().upper() not in given:add('answer_key_mismatch',qid,f'答案原件解析为 {expected}，成品写 {given}')
+            if official and not table.get('answer_source_sha256'):add('answer_key_provenance','sources','答案表缺少原件指纹，重新运行 scripts/answers.py extract')
+    if audio_report:
+        warnings+= [{'code':'audio_wiring_pending','location':item.split('：')[0],'message':item} for item in audio_report['pending']]
+    return {'status':'blocked' if issues else 'automated_checks_passed','delivery_status':'not_ready' if issues else 'content_and_browser_review_required','errors':issues,'warnings':warnings,'audio_wiring':audio_report,'source_ledger_sha256':digest(ledger_path) if ledger_path.is_file() else None,'scope':'Checks source-ledger consistency and detectable defects. Does not certify that ledger transcription or teaching reasoning is correct. Never generate the ledger from completed lesson data to bypass checks.'}
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('exam');p.add_argument('--source-ledger');p.add_argument('--report');a=p.parse_args();path=Path(a.exam)
-    try:r=audit_exam(json.loads(path.read_text()),path.parent,a.source_ledger)
+    p=argparse.ArgumentParser();p.add_argument('exam');p.add_argument('--source-ledger');p.add_argument('--answer-key');p.add_argument('--audio-bundle');p.add_argument('--report');a=p.parse_args();path=Path(a.exam)
+    try:r=audit_exam(json.loads(path.read_text()),path.parent,a.source_ledger,a.answer_key,a.audio_bundle)
     except (OSError,ValueError,KeyError,TypeError) as e:r={'status':'blocked','delivery_status':'not_ready','errors':[{'code':'invalid_audit_input','message':str(e)}]}
     text=json.dumps(r,ensure_ascii=False,indent=2)
     if a.report:Path(a.report).write_text(text)
     print(text);return 1 if r['status']=='blocked' else 0
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':force_utf8();raise SystemExit(main())

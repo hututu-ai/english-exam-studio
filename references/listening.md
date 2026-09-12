@@ -2,7 +2,19 @@
 
 Python 3 + ffmpeg + ffprobe；ASR 使用 whisper-cli 和本地模型，或复用带时间转写。--model 或 WHISPER_MODEL 指向实际模型。先在当前环境寻找可用模型；模型不随包分发，按宿主环境准备。较小模型对专名／口音可能不足，按需用更合适的模型或局部重听复核。
 
-analyze 生成 16k 单声道工作副本、transcript.json、silences.json、analysis.json。规范转写格式：`{"segments":[{"start":1.2,"end":4.8,"text":"Text one..."}]}`，秒数相对完整音频。自动识别 Text one / Text 1 / 第1段是候选，不保证所有录音有口令。
+开工先跑 `python3 scripts/doctor.py --minutes 听力时长`：它报告 ffmpeg/ffprobe/whisper-cli、可用模型、建议并发与粗估耗时，并直接给出本次该走哪一档。缺依赖时按输出改走降级档，不要停在安装或下载上。
+
+```bash
+python3 scripts/audio.py analyze INPUT_AUDIO --out WORK_AUDIO --model WHISPER_MODEL --jobs 4 --threads 5 [--timeout 900] [--reuse|--no-asr]
+python3 scripts/audio.py cut INPUT_AUDIO --manifest SEGMENTS_JSON --out WORK_AUDIO --transcript WORK_AUDIO/transcript.json [--resume|--allow-unverified]
+python3 scripts/audio.py cut INPUT_AUDIO --manifest QUESTIONS_JSON --out WORK_AUDIO/questions --transcript WORK_AUDIO/transcript.json
+```
+
+analyze 生成 16k 单声道工作副本、transcript.json、silences.json、analysis.json。规范转写格式：`{"segments":[{"start":1.2,"end":4.8,"text":"Text one..."}]}`，秒数相对完整音频；文件内 `source_audio_sha256` 绑定本次原音，换音频后重跑而不会串用旧转写。自动识别 Text one / Text 1 / 第1段是候选，不保证所有录音有口令。
+
+速度与稳定性的默认做法：`--jobs N` 在真实静音处把原音切片并发转写（实测长录音收效明显，短录音自动保持单片）；`--threads` 控制单进程线程；`--reuse` 直接复用匹配指纹的转写；`--resume` 只补做缺失或时长不符的片段；`--timeout` 避免单次 ASR 无限等待，超时后按提示改走降级。whisper.cpp 的 GPU 后端在容器、无显卡或沙箱环境会直接崩溃（进程退出码 139），脚本检测到后自动改用 `-ng` 重跑一次并在 analysis.json 记录 device=cpu；若仍失败，换成静音分段而不是反复重试。
+
+`cut` 会校验首尾引句：segments 里写 `opening_quote`/`closing_quote`（逐字取自本 Text 原文），脚本与切点附近的转写做模糊比对，对不上直接报错。这样“引文—切点—音频”三者一致，也避免有人改音频去迁就引文。输出目录默认拒绝覆盖，`--resume` 复用同名片段，改一两段时不必重编码全部。
 
 智能体结合题干、场景变化、题号提示确认边界。前 5 段通常各 1 题，后续分配必须按卷。去掉试音、例题、总说明；重复两遍默认选第一遍完整正文，另一遍可复核。留约 0.15–0.35 秒自然余量，不切尾辅音。若保留两遍，用一个 Text 覆盖并记录策略。
 
@@ -27,7 +39,7 @@ segments.json 示例（只展示一段，实际数组应与 expected_count 等�
 
 ## 每题独立录音与精听选空
 
-先完成每个 Text 的原音对齐，再按题意识别最小完整语境。关系推断保留双方身份线索；行动题保留提议与回应；指代题保留先行词；否定／转折题保留转折前后。两道题可取同一部分，不要求时间顺序或互不重叠。不要把一句答案词裁成孤立音效。
+先完成每个 Text 的原音对齐，再按题意识别最小完整语境。关系推断保留双方身份线索；行动题保留提议与回应；指代题保留先行词；否定／转折题保留转折前后。两道题可取同一部分，不要求时间顺序或互不重叠。不要把一句答案词裁成孤立音效。分段与逐题清单都放在同一个音频工作目录（逐题清单放 `WORK_AUDIO/questions/segments.json`），构建时用 `--audio-bundle WORK_AUDIO` 自动接线，不手写路径。
 
 单题裁剪清单使用完整原音的绝对秒数，注意不要把 Text 局部秒数传给原音 cut：
 ```json
