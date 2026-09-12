@@ -31,11 +31,11 @@ def audit(exam,ledger=None,answer_key=None):
     def flag(code,question,message):review.append({'code':code,'question':question,'message':message})
     key={}
     if answer_key:
-        data=json.loads(Path(answer_key).read_text());key=data.get('answers',data)
+        data=json.loads(Path(answer_key).read_text(encoding='utf-8'));key=data.get('answers',data)
         key={str(k):str(v).strip().upper() for k,v in key.items()}
     ledger_questions={}
     if ledger:
-        for section in json.loads(Path(ledger).read_text()).get('sections',[]):
+        for section in json.loads(Path(ledger).read_text(encoding='utf-8')).get('sections',[]):
             for q in section.get('questions',[]):ledger_questions[str(q['id'])]=q
     for section in exam.get('sections',[]):
         sid=section['id'];kind=section['kind']
@@ -63,7 +63,7 @@ def audit(exam,ledger=None,answer_key=None):
                 evidence_text=' '.join(str(e.get('quote','')) for e in q.get('evidence',[]))
                 wanted=content(option_text);hit=wanted&content(evidence_text)
                 if len(wanted)>=2 and not hit:
-                    flag('evidence_option_low_overlap',qid,f'正确选项与证据句没有共同实词（{sorted(wanted)[:4]}）：要么答案错，要么证据不是依据句')
+                    flag('evidence_option_low_overlap',qid,f'正确选项与证据句没有共同实词（{sorted(wanted)[:4]}）：可能是同义转述；需核对语义对应，不凭词面重合判错')
             if kind=='cloze' and answer and len(' '.join(str(options.get(a,'')) for a in answer).split())>3:
                 flag('cloze_answer_too_long',qid,'完形答案超过三个词，复核是否抄错选项')
             if kind=='grammar' and answer:
@@ -94,7 +94,7 @@ def audit(exam,ledger=None,answer_key=None):
 def main():
     p=argparse.ArgumentParser();p.add_argument('exam');p.add_argument('--ledger');p.add_argument('--answer-key');p.add_argument('--report')
     a=p.parse_args()
-    try:result=audit(json.loads(Path(a.exam).read_text()),a.ledger,a.answer_key)
+    try:result=audit(json.loads(Path(a.exam).read_text(encoding='utf-8')),a.ledger,a.answer_key)
     except (OSError,ValueError,KeyError,json.JSONDecodeError) as e:sys.exit(f'ERROR: {e}')
     text=json.dumps(result,ensure_ascii=False,indent=2)
     if a.report:Path(a.report).write_text(text,encoding='utf-8')

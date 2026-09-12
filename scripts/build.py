@@ -4,13 +4,14 @@
 Audio is wired automatically from an audio bundle (audio.py output) so no one has to keep the
 file names in sync by hand: --audio-bundle DIR, or auto-detected audio-work / audio-out.
 """
-import argparse,copy,json,re,shutil,subprocess
+import argparse,base64,copy,json,re,shutil,subprocess,time,mimetypes
 from pathlib import Path
 from audio_wiring import bundle_dir, wire_audio
 from verify_output import verify_output, verify_template
 from quality_gate import audit_exam
 from answer_audit import audit as answer_audit
-from platform_tools import force_utf8
+from platform_tools import force_utf8, find_tool
+from scope import select
 KINDS={'listening','reading','seven','cloze','grammar','writing'}
 
 def validate_section(s,ids,warnings,problems,qids):
@@ -125,7 +126,7 @@ def validate(d):
         raise ValueError(f'共 {len(problems)} 处问题，一次改完再重跑：\n- '+ '\n- '.join(str(x) for x in problems))
     return {'sections':len(ids),'questions':len(declared),'warnings':warnings,'status':'structural_checks_passed','note':'Does not certify source fidelity, answer correctness, alignment or browser behavior.'}
 
-def validate_features(d,profile='full'):
+def validate_features(d,profile='full',selection='all',mode='lesson',audio_mode='embedded'):
     """Require content backing for the teacher features, not just empty buttons.
 
     profile=full  : 现有要求，精读项（句子精讲、篇章结构、写作积累）齐全
@@ -160,13 +161,14 @@ def validate_features(d,profile='full'):
     return {'status':'passed','profile':profile,'sections':checks,'missing_enrichment':enrichment,
             'scope':'Required feature data present; human review still needed for teaching quality and source fidelity.'}
 
-def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='full'):
-    src=Path(src).resolve();out=Path(out).resolve();original=json.loads(src.read_text(encoding='utf-8'));d=copy.deepcopy(original)
+def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='full',selection='all',mode='lesson',audio_mode='embedded'):
+    src=Path(src).resolve();out=Path(out).resolve();original=json.loads(src.read_text(encoding='utf-8'));d=select(original,selection,mode)
+    started=time.perf_counter()
     for section in d.get('sections',[]):
         if section.get('kind')=='writing':section['teacher_model_word_count']=len(re.findall(r"[A-Za-z]+(?:['’-][A-Za-z]+)*",section.get('teacher_model','')))
-    directory=bundle_dir(src.parent,audio_bundle)
+    directory=bundle_dir(src.parent,audio_bundle) if any(s['kind']=='listening' for s in d['sections']) else None
     audio_report=wire_audio(d,src.parent,directory)
-    report=validate(d);report['feature_coverage']=validate_features(d,profile);report['profile']=profile
+    report=validate(d);report['generation_scope']=d['generation_scope'];report['feature_coverage']=validate_features(d,profile);report['profile']=profile
     ledger_path=source_ledger or (str(src.parent/'source-ledger.json') if (src.parent/'source-ledger.json').is_file() else None)
     key_path=answer_key
     if key_path is None:
@@ -181,13 +183,13 @@ def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='
         details='; '.join(x['question']+': '+x['code'] for x in report['answer_audit']['blocking'])
         raise ValueError('答案审计未通过: '+details+'；回原件核对后再构建')
     report['audio']=audio_report
-    report['pending_items']=sorted(set(audio_report['pending']+[f"第{x['question']}题：{x['message']}" for x in report['answer_audit']['review']]))
+    report['pending_items']=sorted(set(audio_report['pending']+[x['location']+'：'+x['message'] for x in report['quality_gate'].get('warnings',[])]+[f"第{x['question']}题：{x['message']}" for x in report['answer_audit']['review']]))
     report['delivery_status']='quick_profile_content_and_browser_review_required' if profile=='quick' else 'content_and_browser_review_required'
     if profile=='quick':report['pending_items']=sorted(set(report.get('pending_items',[])+['快速档：精读项（句子精讲/篇章结构/写作积累）未生成，补齐后跑 --profile full 重新构建']))
     verify_template(Path(__file__).resolve().parents[1]);resources=[]
     assets=Path(__file__).resolve().parents[1]/'assets'
     for key,filename in [('dictionary','offline-dictionary.json'),('legacy_dictionary','legacy-dictionary.json')]:
-        if key not in d and (assets/filename).exists():d[key]=json.loads((assets/filename).read_text())
+        if key not in d and (assets/filename).exists():d[key]=json.loads((assets/filename).read_text(encoding='utf-8'))
     def source_path(value):
         assert not re.match(r'^[a-zA-Z]+://',value),'Use local resource files'
         path=(src.parent/value).resolve();assert path.is_file(),f'Missing media: {value}';return path
@@ -196,13 +198,22 @@ def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='
         if not obj.get(key):return
         source=source_path(obj[key]);name=f'{folder}/{stem}{source.suffix.lower()}'
         planned.append((source,name));obj[key]=name;resources.append(name)
+    probe_cache={}
+    def duration_of(source,required=True):
+        key=str(source.resolve())
+        if key in probe_cache:return probe_cache[key]
+        exe=find_tool('ffprobe')
+        if not exe:
+            if required:raise ValueError('验证分段时长需要 ffprobe；未分段原音可不依赖 ffprobe')
+            return 0
+        result=subprocess.run([exe,'-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',key],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=30,check=True)
+        probe_cache[key]=float(result.stdout);return probe_cache[key]
     media(d,'full_audio','audio','full')
     for s in d['sections']:
         media(s,'audio','audio',s['id'])
         if s.get('audio'):
             source=next(x for x,n in planned if n==s['audio'])
-            r=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(source)],text=True,capture_output=True,check=True)
-            dur=float(r.stdout);s['audio_duration']=dur
+            dur=duration_of(source,s.get('audio_scope')!='full_paper');s['audio_duration']=dur
             for q in s['questions']:
                 for ev in q.get('evidence',[]):
                     if 'end' in ev:assert ev['end']<=dur+0.05,'Audio evidence exceeds clip duration'
@@ -210,29 +221,42 @@ def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='
             if q.get('audio'):
                 media(q,'audio','audio','Q'+q['id'])
                 qsource=next(x for x,n in planned if n==q['audio'])
-                r=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(qsource)],text=True,capture_output=True,check=True)
-                q['audio_duration']=float(r.stdout)
+                q['audio_duration']=duration_of(qsource)
                 context=q.get('audio_context',{})
                 assert s['kind']=='listening' and 0<=context.get('start',-1)<context.get('end',-1)<=s['audio_duration']+0.1,'Invalid question audio context'
                 assert abs(q['audio_duration']-(context['end']-context['start']))<0.25,'Question audio duration mismatch'
         if s.get('origin'):media(s['origin'],'page_image','sources',s['id']+'-paper')
         for par in s['paragraphs']:media(par,'image','assets',s['id']+'-'+par['id'])
+    for section in d['sections']:
+        alignment=section.get('audio_alignment',{})
+        if alignment.get('transcript_file'):
+            media(alignment,'transcript_file','verification',section['id']+'-transcript')
     # Complete validation before creating output.
     out.mkdir(parents=True,exist_ok=True)
     if (assets/'ECDICT-LICENSE.txt').exists():shutil.copy2(assets/'ECDICT-LICENSE.txt',out/'ECDICT-LICENSE.txt')
     for source,name in planned:
         target=out/name;target.parent.mkdir(parents=True,exist_ok=True)
         if source!=target:shutil.copy2(source,target)
-    payload=json.dumps(d,ensure_ascii=False).replace('<','\\u003c').replace('\u2028','\\u2028').replace('\u2029','\\u2029')
-    template=(Path(__file__).resolve().parents[1]/'assets'/'lesson.html').read_text()
+    embedded={}
+    for source,name in planned:
+        if name.startswith('audio/') and audio_mode=='embedded':
+            mime=mimetypes.guess_type(name)[0] or 'audio/mpeg'
+            embedded[name]='data:'+mime+';base64,'+base64.b64encode(source.read_bytes()).decode('ascii')
+    d['audio_delivery']={'mode':audio_mode,'embedded_count':len(embedded),'external_audio_count':sum(n.startswith('audio/') for _,n in planned)}
+    html_data={**d,'_embedded_audio':embedded}
+    payload=json.dumps(html_data,ensure_ascii=False).replace('<','\\u003c').replace('\u2028','\\u2028').replace('\u2029','\\u2029')
+    template=(Path(__file__).resolve().parents[1]/'assets'/'lesson.html').read_text(encoding='utf-8')
     assert template.count('__EXAM_DATA__')==1,'Invalid template token'
     (out/'index.html').write_text(template.replace('__EXAM_DATA__',payload),encoding='utf-8')
     (out/'exam.json').write_text(json.dumps(d,ensure_ascii=False,indent=2),encoding='utf-8')
     report['template_verification']=verify_output(out,Path(__file__).resolve().parents[1])
     report['resources']=resources
-    report['audio_embedded']=bool(d.get('full_audio') or any(s.get('audio') for s in d['sections']))
+    report['audio_embedded']=bool(embedded)
+    report['audio_delivery']=d['audio_delivery']
+    report['elapsed_seconds']=round(time.perf_counter()-started,3)
+    report['browser_playback']='not_tested_by_builder'
     (out/'answer-audit.json').write_text(json.dumps(report['answer_audit'],ensure_ascii=False,indent=2),encoding='utf-8')
-    (out/'build-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+    (out/'build-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps(report,ensure_ascii=False))
 
 if __name__=='__main__':
@@ -240,6 +264,9 @@ if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('input');p.add_argument('out')
     p.add_argument('--source-ledger');p.add_argument('--audio-bundle');p.add_argument('--answer-key')
     p.add_argument('--profile',choices=['full','quick'],default='full',help='quick=先出可上课版，精读项后补')
+    p.add_argument('--sections',default='all',help='all 或逗号分隔的题型/章节ID，如 reading,A,L6')
+    p.add_argument('--mode',choices=['lesson','intensive'],default='lesson')
+    p.add_argument('--audio-mode',choices=['embedded','folder'],default='embedded')
     a=p.parse_args()
-    try:build(a.input,a.out,a.source_ledger,a.audio_bundle,a.answer_key,a.profile)
-    except (AssertionError,ValueError,KeyError,FileNotFoundError,subprocess.CalledProcessError) as e:p.exit(1,f'ERROR: {e}\n')
+    try:build(a.input,a.out,a.source_ledger,a.audio_bundle,a.answer_key,a.profile,a.sections,a.mode,a.audio_mode)
+    except (AssertionError,ValueError,KeyError,FileNotFoundError,subprocess.CalledProcessError,subprocess.TimeoutExpired) as e:p.exit(1,f'ERROR: {e}\n')

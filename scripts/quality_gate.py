@@ -23,13 +23,18 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
     ledger_path=Path(ledger_path)
     if not ledger_path.is_file():add('source_ledger_missing','sources','缺少独立核对的 source-ledger.json；先读取原卷和答案，不能从成品反向生成台账')
     else:
-        ledger=json.loads(ledger_path.read_text());sources=ledger.get('sources',[])
+        ledger=json.loads(ledger_path.read_text(encoding='utf-8'));sources=ledger.get('sources',[])
         if any(q.get('answer_status')=='official' for s in secs for q in s.get('questions',[])) and not any(x.get('role')=='answers' for x in sources):add('official_answer_file','sources','官方答案必须关联role=answers的原始答案文件')
         if not sources:add('source_files_missing','sources','台账必须保留原始材料路径、用途和SHA256')
         for source in sources:
             path=ledger_path.parent/source.get('path','')
             if not path.is_file() or digest(path)!=source.get('sha256'):add('source_hash',source.get('path',''),'原始材料缺失或指纹不符')
         expected=ledger.get('sections',[])
+        scope=d.get('generation_scope',{})
+        if scope.get('partial'):
+            wanted=scope.get('section_ids',[])
+            if not wanted or any(sid not in [s['id'] for s in expected] for sid in wanted):add('invalid_scope','sections','选择范围不在原件台账内')
+            expected=[s for s in expected if s['id'] in wanted]
         if [s.get('id') for s in expected]!=[s.get('id') for s in secs]:add('source_section_order','sections','与源材料台账中的章节顺序或覆盖不一致')
         actual={s.get('id'):s for s in secs}
         for src in expected:
@@ -54,7 +59,7 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
         sid=s['id'];kind=s['kind'];pars=s.get('paragraphs',[]);qs=s.get('questions',[])
         if kind in ['reading','seven','cloze','grammar']:
             if any('\n' in p.get('text','').strip() for p in pars):add('collapsed_paragraphs',sid,'一条paragraph含多个换行段落，无法逐段翻译或准确定位，请保留原卷真实段落')
-            if len(pars)>=3 and len(s.get('structure',[]))<2:add('structure_too_generic',sid,'多段文章只有一张覆盖全文的结构卡，请分析真实段落功能和推进关系')
+            if len(pars)>=3 and s.get('structure') and len(s.get('structure',[]))<2:add('structure_too_generic',sid,'多段文章只有一张覆盖全文的结构卡，请分析真实段落功能和推进关系')
         for row in s.get('structure',[]):
             if re.search(r'全文共\s*\d+\s*段.{0,50}(顺序逐段|逐段精读)',row.get('analysis','')):add('structure_placeholder',sid,'篇章结构仅描述段数，未给出实际结构分析')
         for p in pars:
@@ -81,14 +86,17 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
                 warn('audio_unsegmented',sid,'听力未分段：HTML 使用整卷原音并标注「整卷原音（未分段）」，逐题复听与精听挖空需人工拖动；交付说明必须写明')
             else:
                 path=base/alignment.get('transcript_file','');start=alignment.get('full_start');end=alignment.get('full_end');whole=' '.join(p.get('text','') for p in pars)
-                if not path.is_file() or digest(path)!=alignment.get('transcript_sha256'):add('audio_transcript_hash',sid,'转写证据缺失或指纹不符');continue
                 if not isinstance(start,(int,float)) or not isinstance(end,(int,float)) or not 0<=start<end:add('audio_source_window',sid,'原音切点无效');continue
                 try:
-                    probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(audio)],capture_output=True,text=True,check=True)
+                    probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(audio)],capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=30,check=True)
                     duration=float(probe.stdout)
-                except (OSError,ValueError,subprocess.CalledProcessError):add('audio_probe',sid,'无法测量实际音频时长');continue
+                except (OSError,ValueError,subprocess.CalledProcessError,subprocess.TimeoutExpired):add('audio_probe',sid,'无法测量实际音频时长');continue
                 if abs(duration-(end-start))>.3:add('audio_source_duration',sid,'整段实际时长与原音切点不符')
-                tr=json.loads(path.read_text());full=base/d.get('full_audio','')
+                if not path.is_file():
+                    if alignment.get('boundary')=='auto_silence':warn('audio_alignment_auto_silence',sid,'无时间转写，已核对文件时长，语义边界仍需逐段试听');continue
+                    add('audio_transcript_hash',sid,'转写证据缺失');continue
+                if digest(path)!=alignment.get('transcript_sha256'):add('audio_transcript_hash',sid,'转写证据指纹不符');continue
+                tr=json.loads(path.read_text(encoding='utf-8'));full=base/d.get('full_audio','')
                 if not full.is_file() or tr.get('source_audio_sha256')!=digest(full):add('transcript_source_audio',sid,'转写未关联到本卷完整原音指纹')
                 boundary=alignment.get('boundary','verified')
                 if boundary=='auto_silence':warn('audio_alignment_auto_silence',sid,'切点由静音自动分段产生：qa-report.md 必须逐段记录实际试听的首尾核对结果')
@@ -108,7 +116,7 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
         key_path=Path(answer_key)
         if not key_path.is_file():add('answer_key_missing_file','sources','--answer-key 指向的文件不存在')
         else:
-            table=json.loads(key_path.read_text());rows=table.get('answers',table)
+            table=json.loads(key_path.read_text(encoding='utf-8'));rows=table.get('answers',table)
             official=0
             for s in secs:
                 for q in s.get('questions',[]):
@@ -125,9 +133,9 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('exam');p.add_argument('--source-ledger');p.add_argument('--answer-key');p.add_argument('--audio-bundle');p.add_argument('--report');a=p.parse_args();path=Path(a.exam)
-    try:r=audit_exam(json.loads(path.read_text()),path.parent,a.source_ledger,a.answer_key,a.audio_bundle)
+    try:r=audit_exam(json.loads(path.read_text(encoding='utf-8')),path.parent,a.source_ledger,a.answer_key,a.audio_bundle)
     except (OSError,ValueError,KeyError,TypeError) as e:r={'status':'blocked','delivery_status':'not_ready','errors':[{'code':'invalid_audit_input','message':str(e)}]}
     text=json.dumps(r,ensure_ascii=False,indent=2)
-    if a.report:Path(a.report).write_text(text)
+    if a.report:Path(a.report).write_text(text,encoding='utf-8')
     print(text);return 1 if r['status']=='blocked' else 0
 if __name__=='__main__':force_utf8();raise SystemExit(main())

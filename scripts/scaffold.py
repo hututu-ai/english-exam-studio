@@ -26,7 +26,7 @@ def sha256(path):
 def load_blocks(path):
     path=Path(path)
     if path.suffix.lower()=='.json':
-        data=json.loads(path.read_text())
+        data=json.loads(path.read_text(encoding='utf-8'))
         if isinstance(data,dict) and 'blocks' in data:
             lines=[]
             for block in data['blocks']:
@@ -81,7 +81,7 @@ def build_ledger(paper,answers,title):
     lines=load_blocks(paper);sections,unparsed=parse_questions(lines)
     table={}
     if answers and Path(answers).is_file():
-        data=json.loads(Path(answers).read_text());table=data.get('answers',{})
+        data=json.loads(Path(answers).read_text(encoding='utf-8'));table=data.get('answers',{})
     ledger={'title':title or '英语试卷讲评','status':'draft_requires_page_by_page_review',
             'sources':[{'role':'paper','path':Path(paper).name,'sha256':sha256(paper)}],
             'sections':[],'unparsed':unparsed,
@@ -104,7 +104,7 @@ def build_ledger(paper,answers,title):
     return ledger
 
 def exam_from_ledger(ledger,title):
-    data=json.loads(Path(ledger).read_text());exam={'title':title or data.get('title') or '英语试卷讲评','subtitle':'课堂讲评',
+    data=json.loads(Path(ledger).read_text(encoding='utf-8'));exam={'title':title or data.get('title') or '英语试卷讲评','subtitle':'课堂讲评',
         'expected_question_ids':[str(q['id']) for s in data['sections'] for q in s['questions']],'sections':[]}
     todo=[]
     for section in data['sections']:

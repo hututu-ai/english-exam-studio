@@ -14,13 +14,13 @@ def tool(*names):
 
 def first_line(cmd):
     try:
-        r=subprocess.run(cmd,capture_output=True,text=True,timeout=20)
+        r=subprocess.run(cmd,capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=3)
         return (r.stdout or r.stderr).strip().splitlines()[0] if (r.stdout or r.stderr).strip() else ''
     except (OSError,subprocess.SubprocessError,IndexError):return ''
 
 def full_output(cmd):
     try:
-        r=subprocess.run(cmd,capture_output=True,text=True,timeout=20)
+        r=subprocess.run(cmd,capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=3)
         return (r.stdout or '')+(r.stderr or '')
     except (OSError,subprocess.SubprocessError):return ''
 
@@ -52,17 +52,17 @@ def main():
     report=describe_platform()
     report['console_encoding']=(getattr(sys.stdout,'encoding','') or '')
     report['cpu_count']=os.cpu_count() or 1
-    report['python_ok']=sys.version_info>=(3,8)
+    report['python_ok']=sys.version_info>=(3,9)
     ffmpeg=tool('ffmpeg');ffprobe=tool('ffprobe');whisper=tool(*WHISPER_NAMES)
     report['ffmpeg']=ffmpeg;report['ffprobe']=ffprobe;report['whisper_cli']=whisper
     report['ffmpeg_version']=first_line([ffmpeg,'-version'])[:80] if ffmpeg else ''
     encoders=full_output([ffmpeg,'-hide_banner','-encoders']) if ffmpeg else ''
-    report['mp3_encoder']=('libmp3lame' in encoders) or (' aac ' in encoders)
-    report['mp3_encoder_name']='libmp3lame' if 'libmp3lame' in encoders else ('aac' if ' aac ' in encoders else None)
+    report['mp3_encoder']='libmp3lame' in encoders
+    report['mp3_encoder_name']='libmp3lame' if 'libmp3lame' in encoders else None
     pdf_names=['pdftotext','pdftoppm','mutool','tesseract','soffice','magick']+(['qlmanage','sips','textutil'] if report['family']=='macos' else [])
     report['pdf_tools']={name:tool(name) for name in pdf_names}
     models=find_models();report['asr_models']=models
-    report['recommended_model']=next((m['path'] for m in models if 'small' in Path(m['path']).name.lower()),None) or (models[-1]['path'] if models else None)
+    report['recommended_model']=next((m['path'] for m in models if 'base' in Path(m['path']).name.lower()),None) or (models[0]['path'] if models else None)
     if whisper and models:
         tag,factor=factor_for(report['recommended_model'])
         report['model_guess']=tag;report['asr_factor_vs_realtime']=factor
@@ -78,7 +78,7 @@ def main():
     if report['capability']=='full_auto':
         notes.append(f"可走完整自动分段：ffmpeg/ffprobe 与 {Path(whisper).name} 均在，建议模型 {Path(report['recommended_model']).name}。")
         if a.minutes:notes.append(f"按 {a.minutes:g} 分钟原音粗估转写约 {report['asr_estimate_seconds']/60:.1f} 分钟（同机实测可能相差两倍）。")
-        notes.append(f"转写并发建议：--jobs {max(1,min(4,(os.cpu_count() or 2)//2))}，每进程 --threads {max(1,(os.cpu_count() or 2)//2)}。")
+        notes.append(f"转写并发建议：--jobs {max(1,min(4,(os.cpu_count() or 2)//2))}，每进程 --threads {max(1,(os.cpu_count() or 2)//max(1,min(4,(os.cpu_count() or 2)//2)))}。")
     elif report['capability']=='silence_only':
         if whisper and not report['recommended_model']:notes.append('有 whisper 可执行文件但没找到本地模型：'+hints['model'])
         else:notes.append('没找到 whisper.cpp 可执行文件：'+hints['whisper'])
@@ -86,13 +86,15 @@ def main():
     else:
         notes.append('缺少 ffmpeg/ffprobe：'+hints['ffmpeg'])
         notes.append('在装好之前不要切割或转码：把老师给的原始音频直接写进 exam.json 的 full_audio 与听力 section.audio，构建会原样复制并嵌入，听力仍然能播放，只是没有分段。')
-    if 'mp3_encoder_missing' in levels:notes.append('当前 ffmpeg 没有 mp3 编码器：分段用 -c:a copy 或 aac/m4a，不要卡在重新安装 ffmpeg 上。')
+    if 'mp3_encoder_missing' in levels:notes.append('当前 ffmpeg 没有 mp3 编码器：当前裁剪器输出 MP3，不能把 AAC 当成 MP3；准备支持 libmp3lame 的 ffmpeg，或明确交付未分段原音。')
     if not any(report['pdf_tools'].get(k) for k in ['pdftotext','pdftoppm','mutool','soffice']):
         notes.append('未检出 PDF/Office 命令行工具（'+hints['pdf']+'）：PDF 走逐页渲染加视觉识别，DOCX 仍可用 scripts/extract.py。')
     if report['family']=='windows':
         notes.append('Windows 提示：装完 ffmpeg/whisper 后重开终端让 PATH 生效；PowerShell 里用 where.exe ffmpeg 确认能定位到。')
     report['notes']=notes
     report['install_hints']=hints
+    report['dependency_budget_seconds']=120
+    report['dependency_failure_policy']='stop_download_continue_available_sections; see references/dependency-recovery.md'
     report['next_step']={'full_auto':'python3 scripts/audio.py analyze AUDIO --out WORK_AUDIO','silence_only':'python3 scripts/audio.py analyze AUDIO --out WORK_AUDIO --no-asr','no_ffmpeg':'在 exam.json 里直接指向原始音频文件，再跑 build.py'}[report['capability']]
     text=json.dumps(report,ensure_ascii=False,indent=2)
     if a.json:print(text)

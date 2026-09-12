@@ -7,6 +7,7 @@ Windows notes that actually bite:
   * ffmpeg is usually installed by winget/scoop/choco but not always on PATH
 """
 import os,shutil,sys
+from pathlib import Path
 
 IS_WINDOWS=os.name=='nt'
 
@@ -20,6 +21,17 @@ def force_utf8():
 
 def find_tool(*names):
     for name in names:
+        key={'ffmpeg':'FFMPEG_BIN','ffprobe':'FFPROBE_BIN'}.get(name)
+        if key and os.environ.get(key):
+            configured=Path(os.environ[key]).expanduser()
+            if configured.is_file():return str(configured.resolve())
+        if key:
+            directories=[os.environ.get('ENGLISH_EXAM_TOOLS','')]
+            if IS_WINDOWS and os.environ.get('LOCALAPPDATA'):
+                directories.append(str(Path(os.environ['LOCALAPPDATA'])/'english-exam-studio/tools/bin'))
+            for directory in filter(None,directories):
+                candidate=Path(directory)/(name+('.exe' if IS_WINDOWS else ''))
+                if candidate.is_file():return str(candidate.resolve())
         found=shutil.which(name)
         if found:return found
     return None

@@ -35,7 +35,7 @@ def load_text(path):
     path=Path(path)
     if path.suffix.lower()=='.docx':return docx_text(path)
     if path.suffix.lower()=='.json':
-        data=json.loads(path.read_text())
+        data=json.loads(path.read_text(encoding='utf-8'))
         if isinstance(data,dict) and 'blocks' in data:return '\n'.join(b.get('text','') for b in data['blocks'])
         raise ValueError('JSON 答案文件需要一个 blocks 数组（scripts/extract.py 的输出）')
     return path.read_text(encoding='utf-8',errors='replace')
@@ -87,8 +87,8 @@ def extract(path,planning=None):
             'note':'机器提取结果必须与答案原件逐页比对；冲突行在 unparsed 中列出，不得自行取舍后仍标 official。'}
 
 def check(table_path,ledger_path):
-    table=json.loads(Path(table_path).read_text());rows=table['answers']
-    ledger=json.loads(Path(ledger_path).read_text());problems=[]
+    table=json.loads(Path(table_path).read_text(encoding='utf-8'));rows=table['answers']
+    ledger=json.loads(Path(ledger_path).read_text(encoding='utf-8'));problems=[]
     for section in ledger.get('sections',[]):
         for q in section.get('questions',[]):
             qid=str(q['id']);key=rows.get(qid)
@@ -104,7 +104,7 @@ def check(table_path,ledger_path):
 
 def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='command',required=True)
-    x=sub.add_parser('extract');x.add_argument('source');x.add_argument('--out',required=True);x.add_argument('--planning',help='可选：说明题型与题号区间的 JSON 文件');x.set_defaults(func=lambda a:extract(a.source,json.loads(Path(a.planning).read_text()) if a.planning else None))
+    x=sub.add_parser('extract');x.add_argument('source');x.add_argument('--out',required=True);x.add_argument('--planning',help='可选：说明题型与题号区间的 JSON 文件');x.set_defaults(func=lambda a:extract(a.source,json.loads(Path(a.planning).read_text(encoding='utf-8')) if a.planning else None))
     x=sub.add_parser('check');x.add_argument('answers');x.add_argument('--ledger',required=True);x.set_defaults(func=lambda a:check(a.answers,a.ledger))
     a=p.parse_args()
     try:result=a.func(a)

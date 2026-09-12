@@ -28,7 +28,7 @@ def bundle_dir(src_dir,explicit=None):
     return None
 
 def read_segments(path,kind):
-    data=json.loads(Path(path).read_text())
+    data=json.loads(Path(path).read_text(encoding='utf-8'))
     assert data.get('kind',kind)==kind,f'{path} 不是 {kind} 类型的切段清单'
     return data
 
@@ -48,7 +48,7 @@ def find_transcript(directory,src_dir,full):
     target=sha256(full) if full and Path(full).is_file() else None
     for candidate in candidates:
         if not candidate.is_file():continue
-        try:data=json.loads(candidate.read_text())
+        try:data=json.loads(candidate.read_text(encoding='utf-8'))
         except (OSError,ValueError):continue
         if target is None or data.get('source_audio_sha256')==target:return candidate
     return None

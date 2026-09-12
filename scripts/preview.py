@@ -80,5 +80,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     server = ThreadingHTTPServer(('127.0.0.1', args.port), partial(RangeHandler, directory=os.path.abspath(args.directory)))
     print(f'Preview: http://127.0.0.1:{args.port}/', flush=True)
-    print('（Windows 首次运行如弹出防火墙提示，允许“专用网络”访问即可；本服务只监听本机地址。）', flush=True)
+    print('（只监听本机地址，无需向局域网开放。关闭服务后本机预览链接会失效；下载的 HTML 仍可用浏览器打开。）', flush=True)
     server.serve_forever()

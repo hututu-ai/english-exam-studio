@@ -27,8 +27,8 @@ def sha256(path):
         for block in iter(lambda:f.read(1<<20),b''):h.update(block)
     return h.hexdigest()
 
-def run(args,timeout=None):
-    try:r=subprocess.run(list(map(str,args)),capture_output=True,text=True,timeout=timeout)
+def run(args,timeout=600):
+    try:r=subprocess.run(list(map(str,args)),capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=timeout or 600)
     except FileNotFoundError as error:
         name=str(args[0])
         hint=install_hints().get('ffmpeg') if name.startswith(('ffmpeg','ffprobe')) else install_hints().get('whisper')
@@ -60,7 +60,7 @@ def transcript(data):
     return rows
 
 def find_silences(path,noise_db='-35dB',min_len=0.6):
-    try:r=subprocess.run([ffmpeg_bin(),'-hide_banner','-i',str(path),'-af',f'silencedetect=n={noise_db}:d={min_len}','-f','null','-'],capture_output=True,text=True)
+    try:r=subprocess.run([ffmpeg_bin(),'-hide_banner','-i',str(path),'-af',f'silencedetect=n={noise_db}:d={min_len}','-f','null','-'],timeout=300,capture_output=True,text=True,encoding="utf-8",errors="replace")
     except FileNotFoundError as error:raise ValueError('找不到 ffmpeg。'+install_hints()['ffmpeg']) from error
     if r.returncode:raise ValueError(r.stderr[-2000:])
     sil=[];start=None
@@ -89,7 +89,7 @@ def whisper_supports_no_gpu():
         text=''
         exe=whisper_bin()
         if exe:
-            try:r=subprocess.run([exe,'--help'],capture_output=True,text=True,timeout=20);text=(r.stdout or '')+(r.stderr or '')
+            try:r=subprocess.run([exe,'--help'],capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=20);text=(r.stdout or '')+(r.stderr or '')
             except (OSError,subprocess.SubprocessError):text=''
         DEVICE['supports_no_gpu']='-ng' in text or '--no-gpu' in text
     return DEVICE['supports_no_gpu']
@@ -97,14 +97,14 @@ def whisper_supports_no_gpu():
 def whisper_rows(wav,model,language,out_stem,threads,timeout,no_gpu=False,retry=True):
     flags=['-ng'] if (no_gpu or DEVICE['mode']=='cpu') else []
     command=[whisper_exe(),'-m',model,'-f',str(wav),'-l',language,'-oj','-of',str(out_stem),'-np','-t',threads]+flags
-    try:run(command,timeout=timeout)
+    try:run(command,timeout=timeout or 600)
     except (ValueError,subprocess.TimeoutExpired) as error:
         if retry and not flags and whisper_supports_no_gpu():
             progress('whisper 的 GPU 后端失败（常见于容器/无显卡/沙箱环境），自动改用 -ng 重新转写')
             DEVICE['mode']='cpu'
             return whisper_rows(wav,model,language,out_stem,threads,timeout,no_gpu=True,retry=False)
         raise
-    return transcript(json.loads(Path(str(out_stem)+'.json').read_text()))
+    return transcript(json.loads(Path(str(out_stem)+'.json').read_text(encoding='utf-8')))
 
 def quote_matches(quote,rows):
     words=lambda t:re.findall('[a-z]+',str(t).lower())
@@ -121,14 +121,18 @@ def analyze(a):
     model=a.model or os.environ.get('WHISPER_MODEL')
     cached=out/'transcript.json';rows=None
     if a.reuse and cached.is_file():
-        old=json.loads(cached.read_text())
+        old=json.loads(cached.read_text(encoding='utf-8'))
         if old.get('source_audio_sha256')==source_hash and old.get('segments'):
             rows=transcript(old);progress(f'复用已有转写（{len(rows)} 段），跳过 ASR 与解码')
+    if rows is None and a.transcript:
+        imported=json.loads(Path(a.transcript).read_text(encoding='utf-8'))
+        if imported.get('source_audio_sha256')!=source_hash:raise ValueError('外部转写必须绑定当前原音 SHA256，不能复用未知来源转写')
+        rows=transcript(imported)
     wav=out/'asr.wav'
     if rows is None:
         progress('生成 16k 单声道工作副本…')
         run([ffmpeg_bin(),'-y','-v','error','-i',str(source),'-vn','-ar','16000','-ac','1',str(wav)])
-    sil=find_silences(wav if wav.is_file() else source)
+    sil=find_silences(source)
     dump(out/'silences.json',sil)
     progress(f'静音候选 {len(sil)} 处')
     if rows is None and a.no_asr:
@@ -140,7 +144,7 @@ def analyze(a):
     elif rows is None:
         if not model or not Path(model).is_file():raise ValueError('Supply --model LOCAL_MODEL or --transcript TIMED_JSON, or fall back to --no-asr')
         if a.no_gpu:DEVICE['mode']='cpu'
-        jobs=max(1,a.jobs);threads=max(1,a.threads)
+        jobs=max(1,min(a.jobs,os.cpu_count() or 1));threads=max(1,min(a.threads,(os.cpu_count() or 1)//jobs))
         points=split_points(sil,d,jobs)
         spans=list(zip([0.0]+points,points+[d]))
         progress(f'ASR：{len(spans)} 个分片并行，每片 {threads} 线程（源 {str(source) if not wav.is_file() else "16k wav"}）')
@@ -178,7 +182,7 @@ def analyze(a):
     print(json.dumps({**{k:report[k] for k in ['duration','mode','transcript_segments','silences','chunk_parallelism']},**{'markers':len(candidates),'out':str(out)}},ensure_ascii=False))
 
 def cut(a):
-    manifest=json.loads(Path(a.manifest).read_text());rows=manifest['segments']
+    manifest=json.loads(Path(a.manifest).read_text(encoding='utf-8'));rows=manifest['segments']
     source=Path(a.input).resolve();d=probe(source);source_hash=sha256(source)
     assert rows and len(rows)==manifest['expected_count'],'Segment count mismatch'
     kind=manifest.get('kind','text');assert kind in {'text','question'},'Unknown segment kind'
@@ -197,27 +201,32 @@ def cut(a):
         end=s['end']
     transcript_rows=[]
     if a.transcript:
-        data=json.loads(Path(a.transcript).read_text());transcript_rows=transcript(data)
+        data=json.loads(Path(a.transcript).read_text(encoding='utf-8'));transcript_rows=transcript(data)
         if data.get('source_audio_sha256') and data['source_audio_sha256']!=source_hash:
             raise ValueError('转写来自另一个音频文件：先对本次原音重跑 analyze')
     unverified=[s['id'] for s in rows if s.get('verified') is not True]
     out=Path(a.out);out.mkdir(parents=True,exist_ok=True)
     suffix=source.suffix.lower();keep_full=suffix in AUDIO_COPY_SUFFIXES
     full_name='full'+suffix if keep_full else 'full.mp3'
+    previous={}
+    if a.resume and (out/'segments.json').is_file():
+        previous=json.loads((out/'segments.json').read_text(encoding='utf-8'))
+    reusable_source=previous.get('source_audio_sha256')==source_hash
+    prior={str(x['id']):x for x in previous.get('segments',[])}
     if not a.resume:
         stale=[x.name for x in [out/full_name,out/'segments.json']+[out/(s['id']+'.mp3') for s in rows] if x.exists()]
         assert not stale,'输出目录已有文件（'+', '.join(stale[:4])+'）；加 --resume 复用或换目录'
     threads=max(1,a.threads);jobs=max(1,a.jobs)
     with tempfile.TemporaryDirectory(dir=out) as temp:
         stage=Path(temp)
-        if not (out/full_name).is_file():
+        if not (out/full_name).is_file() or not reusable_source:
             progress('准备完整原音…')
             if keep_full:shutil.copy2(source,stage/full_name)
             else:run([ffmpeg_bin(),'-v','error','-threads',threads,'-i',str(source),'-vn','-c:a','libmp3lame','-q:a','2',str(stage/full_name)])
         final=[];todo=[];reused=[]
         for s in rows:
             expected=round(s['end']-s['start'],3);target=out/(s['id']+'.mp3')
-            if a.resume and target.is_file():
+            if a.resume and reusable_source and target.is_file() and all(prior.get(s['id'],{}).get(k)==s[k] for k in ['start','end']):
                 try:
                     measured=probe(target)
                     if abs(measured-expected)<0.25:reused.append(s['id']);final.append({**s,'audio':target.name,'duration':round(measured,3)});continue

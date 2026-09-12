@@ -18,10 +18,9 @@ def split(exam_path,out,force=False):
     out=Path(out);out.mkdir(parents=True,exist_ok=True)
     existing=sorted(p.name for p in out.glob('*.json'))
     if existing and not force:raise ValueError(f'{out} 已有 {len(existing)} 个 json（{existing[:3]}）；加 --force 覆盖')
-    meta={'title':exam.get('title'),'subtitle':exam.get('subtitle'),'expected_question_ids':exam.get('expected_question_ids'),
-          'full_audio':exam.get('full_audio'),'section_order':[s['id'] for s in exam['sections']],
-          'source':str(Path(exam_path).resolve()),
-          'note':'每个 <section-id>.json 只放一个 section 对象；改完 merge 回来。merge 不合并其它顶层字段，请把全卷级字段留在 exam.json 或 _meta.json。'}
+    meta={k:v for k,v in exam.items() if k!='sections'}
+    meta['section_order']=[s['id'] for s in exam['sections']]
+    meta['_source']=str(Path(exam_path).resolve())
     (out/'_meta.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2),encoding='utf-8')
     for section in exam['sections']:
         (out/f"{section['id']}.json").write_text(json.dumps(section,ensure_ascii=False,indent=2),encoding='utf-8')
@@ -57,13 +56,13 @@ def check(directory):
 def merge(directory,out):
     meta,sections,extra=load_parts(directory)
     target=Path(out)
-    base=json.loads(target.read_text(encoding='utf-8')) if target.is_file() else {}
-    merged={**base,'title':base.get('title') or meta.get('title'),'subtitle':base.get('subtitle') or meta.get('subtitle'),
-            'expected_question_ids':meta.get('expected_question_ids') or base.get('expected_question_ids'),
-            'sections':sections}
-    for key in ['full_audio','dictionary','legacy_dictionary','version','notes']:
-        if meta.get(key) and not merged.get(key):merged[key]=meta[key]
-    merged={k:v for k,v in merged.items() if v is not None}
+    if Path(meta['_source']).parent!=target.resolve().parent:
+        raise ValueError('合并输出必须与原 exam.json 同目录，保持素材相对路径有效')
+    if any(section.get('id')!=sid for section,sid in zip(sections,meta['section_order'])):
+        raise ValueError('分节文件 ID 与文件名不符，禁止串节合并')
+    merged={k:v for k,v in meta.items() if k not in {'section_order','_source'}}
+    merged['sections']=sections
+    target.parent.mkdir(parents=True,exist_ok=True)
     target.write_text(json.dumps(merged,ensure_ascii=False,indent=2),encoding='utf-8')
     return {'out':str(target),'sections':len(sections),'questions':sum(len(s.get('questions',[])) for s in sections),
             'section_order':[s['id'] for s in sections],'unused_files':extra,
