@@ -123,7 +123,7 @@ WorkBuddy 官方提供本地技能包导入入口，但本项目尚未完成该�
 
 ## 我装的是旧版，怎么更新？
 
-Skill 是电脑上的文件夹，不会自动升级，需要发布新版本后手动换一次。当前最新版本是 **1.3.4**。
+Skill 是电脑上的文件夹，不会自动升级，需要发布新版本后手动换一次。当前最新版本是 **1.3.5**。
 
 最省事的做法是让助手更新：把「请把 english-exam-studio 更新到最新版：先备份我当前的技能目录，再从 https://github.com/hututu-ai/english-exam-studio/releases/latest 下载最新 ZIP 替换旧文件并保留我的笔记文件，最后告诉我版本变化」发给它就够了。也可以自己从 [最新版本](https://github.com/hututu-ai/english-exam-studio/releases/latest) 下载 `english-exam-studio.zip`，在平台的已安装技能里覆盖导入。
 
