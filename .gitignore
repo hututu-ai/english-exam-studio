@@ -23,3 +23,5 @@ dist/
 *.pem
 *.key
 ggml-*.bin
+
+node_modules/

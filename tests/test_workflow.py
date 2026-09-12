@@ -15,6 +15,7 @@ import wave
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
 import build, parts, scope, doctor, audio
+from package_lesson import package
 import bounded_command, platform_tools
 from verify_output import verify_output
 
@@ -27,6 +28,30 @@ class Workflow(unittest.TestCase):
         self.base=Path(self.temp.name)
         self.exam=json.loads((ROOT/'examples/demo-reading.json').read_text(encoding='utf-8'))
     def tearDown(self):self.temp.cleanup()
+
+    def test_invalid_ids_and_cross_section_paragraph_collision(self):
+        d=copy.deepcopy(self.exam);d['sections'][0]['questions'][0]['id']='21"]'
+        with self.assertRaises(ValueError):build.validate(d)
+        d=copy.deepcopy(self.exam);other=copy.deepcopy(d['sections'][0]);other['id']='B'
+        for i,q in enumerate(other['questions']):q['id']=str(30+i)
+        d['sections'].append(other)
+        with self.assertRaisesRegex(ValueError,'Duplicate paragraph ID across sections'):build.validate(d)
+
+    def test_delivery_requires_current_browser_evidence_and_complete_html(self):
+        out=self.base/'output'
+        with contextlib.redirect_stdout(io.StringIO()):build.build(ROOT/'examples/demo-reading.json',out,ROOT/'examples/source-ledger.json')
+        self.assertTrue((out/'打开课件.html').exists())
+        with self.assertRaisesRegex(ValueError,'浏览器'):package(out,self.base/'lesson.zip')
+        self.assertEqual(package(out,self.base/'preview.zip',True)['status'],'preview_only_browser_check_pending')
+        # Unit fixture only: integration workflow creates real browser evidence.
+        data=(out/'index.html').read_bytes()
+        evidence={'status':'passed','engine':'unit-test-fixture','html_sha256':hashlib.sha256(data).hexdigest(),'checks':[{'name':'unit fixture','status':'passed'}],'errors':[]}
+        write(out/'browser-check.json',evidence)
+        self.assertEqual(package(out,self.base/'lesson.zip')['status'],'browser_checked')
+        evidence['html_sha256']='stale';write(out/'browser-check.json',evidence)
+        with self.assertRaisesRegex(ValueError,'浏览器'):package(out,self.base/'stale.zip')
+        (out/'index.html').write_bytes(data[:-200])
+        with self.assertRaises(ValueError):verify_output(out)
 
     def test_scope_order_and_unknown(self):
         a=self.exam['sections'][0];b=copy.deepcopy(a);b['id']='B'

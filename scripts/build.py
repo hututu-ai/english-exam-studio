@@ -65,7 +65,7 @@ def validate_section(s,ids,warnings,problems,qids):
             if q.get('audio'):
                 assert s['kind']=='listening' and q.get('audio_context',{}).get('selection_reason'),'Question audio needs a section, a context and a selection reason'
             if q.get('knowledge'):assert all(q['knowledge'].get(k) for k in ['title','rule','example','explanation']),'Incomplete inline knowledge card'
-            q['id']=str(q['id']);assert q['id'] not in qids,'Duplicate question number';qids.add(q['id'])
+            q['id']=str(q['id']);assert re.fullmatch(r'[A-Za-z0-9_-]+',q['id']),'Invalid question ID';assert q['id'] not in qids,'Duplicate question number';qids.add(q['id'])
             assert q.get('stem') and isinstance(q.get('options',{}),dict),'Invalid question'
             if s.get('expected_option_count'):
                 assert len(q['options'])==s['expected_option_count'],f"Question {q['id']} option count mismatch"
@@ -112,8 +112,12 @@ def validate(d):
     for s in d['sections']:
         for q in s.get('questions',[]) or []:
             if isinstance(q,dict) and q.get('id') is not None:declared.add(str(q['id']))
-    qids=set()
+    qids=set();paragraph_ids=set()
     for s in d['sections']:
+        for par in s.get('paragraphs',[]):
+            pid=par.get('id')
+            if pid in paragraph_ids:problems.append('Duplicate paragraph ID across sections: '+str(pid))
+            paragraph_ids.add(pid)
         try:validate_section(s,ids,warnings,problems,qids)
         except (AssertionError,KeyError,TypeError,IndexError,ValueError) as error:
             problems.append(f"{s.get('id','?')}: {error}")
@@ -253,6 +257,7 @@ def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='
     template=(Path(__file__).resolve().parents[1]/'assets'/'lesson.html').read_text(encoding='utf-8')
     assert template.count('__EXAM_DATA__')==1,'Invalid template token'
     (out/'index.html').write_text(template.replace('__EXAM_DATA__',payload),encoding='utf-8')
+    shutil.copy2(assets/'open-guide.html',out/'打开课件.html')
     (out/'exam.json').write_text(json.dumps(d,ensure_ascii=False,indent=2),encoding='utf-8')
     report['template_verification']=verify_output(out,Path(__file__).resolve().parents[1])
     report['resources']=resources

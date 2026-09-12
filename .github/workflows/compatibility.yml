@@ -19,3 +19,36 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - run: python scripts/build.py examples/demo-reading.json output/demo --source-ledger examples/source-ledger.json
       - run: python scripts/verify_output.py output/demo
+  browser:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            engine: chromium
+          - os: ubuntu-latest
+            engine: webkit
+          - os: windows-latest
+            engine: chromium
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock playwright@1.62.1
+      - run: npx playwright install --with-deps ${{ matrix.engine }}
+      - run: python tests/make_browser_fixture.py work/browser-input work/browser-output
+      - run: node scripts/browser_check.cjs work/browser-output --stress
+        env:
+          BROWSER_ENGINE: ${{ matrix.engine }}
+      - run: python scripts/package_lesson.py work/browser-output work/checked-lesson.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-${{ matrix.os }}-${{ matrix.engine }}
+          path: work/browser-output/browser-check.json
