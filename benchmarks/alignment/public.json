@@ -1,0 +1,14 @@
+[
+  {
+    "id": "synthetic",
+    "audio": "sample.wav",
+    "text": "Woman, Shall we visit the museum this afternoon?\nMan, Yes. The exhibition starts at two, but let's leave at eleven so we can have lunch first.\nWoman, Good idea. Should we buy the tickets online?\nMan, No, we can buy them at the ticket office when we arrive.\n",
+    "provenance": "own synthetic speech"
+  },
+  {
+    "id": "repeat",
+    "audio": "repeat.wav",
+    "text": "Woman, Shall we visit the museum this afternoon?\nMan, Yes. The exhibition starts at two, but let's leave at eleven so we can have lunch first.\nWoman, Good idea. Should we buy the tickets online?\nMan, No, we can buy them at the ticket office when we arrive.\n Woman, Shall we visit the museum this afternoon?\nMan, Yes. The exhibition starts at two, but let's leave at eleven so we can have lunch first.\nWoman, Good idea. Should we buy the tickets online?\nMan, No, we can buy them at the ticket office when we arrive.\n",
+    "provenance": "same synthetic repeated with 2s leading and 3s middle silence"
+  }
+]

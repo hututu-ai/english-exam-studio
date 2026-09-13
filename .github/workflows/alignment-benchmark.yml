@@ -1,0 +1,37 @@
+name: Experimental audio alignment benchmark
+on:
+  push:
+    branches: ['experiment/audio-alignment-20260914']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  align:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [qwen, whisperx, stable]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated backend dependencies
+        shell: python
+        run: |
+          import subprocess, sys
+          package = {'qwen':'qwen-asr','whisperx':'whisperx','stable':'stable-ts'}['${{ matrix.backend }}']
+          subprocess.run([sys.executable,'-m','pip','install','torch','torchaudio','--index-url','https://download.pytorch.org/whl/cpu'],check=True,timeout=600)
+          subprocess.run([sys.executable,'-m','pip','install',package],check=True,timeout=600)
+      - name: Actual CPU model inference
+        shell: python
+        run: |
+          import subprocess,sys
+          subprocess.run([sys.executable,'benchmarks/alignment/benchmark.py','${{ matrix.backend }}','benchmarks/alignment/public.json','--out','results/${{ matrix.backend }}.json','--cache','model-cache'],check=True,timeout=900)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: alignment-windows-${{ matrix.backend }}
+          path: results/
