@@ -12,6 +12,7 @@ from quality_gate import audit_exam
 from answer_audit import audit as answer_audit
 from platform_tools import force_utf8, find_tool
 from scope import select
+from preferences import features, apply_plan
 KINDS={'listening','reading','seven','cloze','grammar','writing'}
 
 def validate_section(s,ids,warnings,problems,qids):
@@ -48,6 +49,10 @@ def validate_section(s,ids,warnings,problems,qids):
         assert item.get('paragraph_id') in pars and item.get('source_quote') in pars[item['paragraph_id']]['text'] and item.get('prompt') and item.get('check'),'Invalid transfer source or instructions'
     for item in s.get('writing_steps',{}).get('model_analysis',[]):
         assert item.get('quote') and item['quote'] in s.get('teacher_model','') and item.get('analysis'),'Writing analysis must quote the actual model'
+    for item in s.get('culture_background',[]):
+        assert item.get('paragraph_id') in pars and item.get('quote') and item['quote'] in pars[item['paragraph_id']]['text'],'Culture background must quote this passage'
+        assert item.get('title') and item.get('explanation') and item.get('teaching_note'),'Incomplete cultural background'
+        assert item.get('sources') and all(re.match(r'^https?://',x.get('url','')) and x.get('title') for x in item['sources']),'Culture background needs verified source references'
     ranges={}
     for b in s.get('blanks',[]):
         assert b['paragraph_id'] in pars,'Unknown blank paragraph'
@@ -136,7 +141,7 @@ def validate_features(d,profile='full',selection='all',mode='lesson',audio_mode=
     profile=full  : 现有要求，精读项（句子精讲、篇章结构、写作积累）齐全
     profile=quick : 先保讲课必需项（逐题解析、答案证据、听力挖空、证据段译文），精读项可后补
     """
-    quick=profile=='quick';checks=[];enrichment=[]
+    quick=profile=='quick';checks=[];enrichment=[];chosen=features(d)
     for s in d['sections']:
         sid=s['id'];kind=s['kind']
         required=['blanks'] if kind=='listening' else []
@@ -149,7 +154,12 @@ def validate_features(d,profile='full',selection='all',mode='lesson',audio_mode=
             enrichment+=[{'section':sid,'missing':key} for key in ['sentences','structure','writing_bank'] if not s.get(key)]
         else:
             required+=['quick_words','vocabulary']
-            if kind in {'reading','seven','cloze','grammar'}:required+=['sentences','structure','writing_bank']
+            if kind in {'reading','seven','cloze','grammar'}:
+                required+=['sentences']
+                if chosen['deep_reading']:required+=['structure']
+                if chosen['writing_transfer']:required+=['writing_bank']
+        if chosen['culture_background'] and kind in {'reading','seven','cloze','grammar','listening'}:
+            assert s.get('culture_background') or s.get('culture_note'),f'{sid}: 请补充文化背景或说明本篇无必要背景'
         for key in required:
             assert s.get(key),f'{sid}: missing feature content {key}; complete it before delivery'
         if kind!='writing' and not quick:
@@ -165,8 +175,16 @@ def validate_features(d,profile='full',selection='all',mode='lesson',audio_mode=
     return {'status':'passed','profile':profile,'sections':checks,'missing_enrichment':enrichment,
             'scope':'Required feature data present; human review still needed for teaching quality and source fidelity.'}
 
-def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='full',selection='all',mode=None,audio_mode='embedded'):
-    src=Path(src).resolve();out=Path(out).resolve();original=json.loads(src.read_text(encoding='utf-8'));d=select(original,selection,mode)
+def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile='full',selection='all',mode=None,audio_mode='embedded',plan=None):
+    src=Path(src).resolve();out=Path(out).resolve();original=json.loads(src.read_text(encoding='utf-8'));d=apply_plan(original,json.loads(Path(plan).read_text(encoding='utf-8'))) if plan else select(original,selection,mode)
+    d['features']=features(d)
+    for section in d['sections']:
+        if not d['features']['deep_reading']:
+            for key in ['structure','logic_steps','inquiry']:section.pop(key,None)
+        if not d['features']['writing_transfer']:
+            for key in ['writing_bank','transfer_tasks']:section.pop(key,None)
+        if not d['features']['culture_background']:
+            for key in ['culture_background','culture_note']:section.pop(key,None)
     started=time.perf_counter()
     for section in d.get('sections',[]):
         if section.get('kind')=='writing':section['teacher_model_word_count']=len(re.findall(r"[A-Za-z]+(?:['’-][A-Za-z]+)*",section.get('teacher_model','')))
@@ -286,10 +304,11 @@ if __name__=='__main__':
     force_utf8()
     p=argparse.ArgumentParser();p.add_argument('input');p.add_argument('out')
     p.add_argument('--source-ledger');p.add_argument('--audio-bundle');p.add_argument('--answer-key')
+    p.add_argument('--plan',help='老师确认的 generation-plan.json')
     p.add_argument('--profile',choices=['full','quick'],default='full',help='quick=先出可上课版，精读项后补')
     p.add_argument('--sections',default='all',help='all 或逗号分隔的题型/章节ID，如 reading,A,L6')
     p.add_argument('--mode',choices=['lesson','intensive'])
     p.add_argument('--audio-mode',choices=['embedded','folder'],default='embedded')
     a=p.parse_args()
-    try:build(a.input,a.out,a.source_ledger,a.audio_bundle,a.answer_key,a.profile,a.sections,a.mode,a.audio_mode)
+    try:build(a.input,a.out,a.source_ledger,a.audio_bundle,a.answer_key,a.profile,a.sections,a.mode,a.audio_mode,a.plan)
     except (AssertionError,ValueError,KeyError,FileNotFoundError,subprocess.CalledProcessError,subprocess.TimeoutExpired) as e:p.exit(1,f'ERROR: {e}\n')

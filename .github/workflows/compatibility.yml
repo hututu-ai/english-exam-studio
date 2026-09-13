@@ -54,6 +54,11 @@ jobs:
         env:
           BROWSER_ENGINE: ${{ matrix.engine }}
       - run: python scripts/package_lesson.py work/browser-output work/checked-lesson.zip
+      - run: python scripts/build.py work/browser-input/exam.json work/selected-output --source-ledger work/browser-input/source-ledger.json --plan examples/teaching-plan.json
+      - run: node scripts/browser_check.cjs work/selected-output
+        env:
+          BROWSER_ENGINE: ${{ matrix.engine }}
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:

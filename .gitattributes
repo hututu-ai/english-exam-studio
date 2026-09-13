@@ -3,3 +3,9 @@
 *.html text eol=lf
 *.md text eol=lf
 *.yml text eol=lf
+
+*.cjs text eol=lf
+*.yaml text eol=lf
+*.txt text eol=lf
+VERSION text eol=lf
+LICENSE text eol=lf

@@ -35,7 +35,7 @@ def update_steps():
         '',
         '  请把 english-exam-studio Skill 更新到最新版：先备份我当前的技能目录，'
         f'再从 {RELEASE_PAGE} 下载最新 ZIP，替换旧文件（保留我自己的笔记文件），'
-        '更新后确认 VERSION 已变化并运行 scripts/doctor.py 检查环境，最后告诉我版本变化。',
+        '更新后运行 scripts/check_install.py 确认完整安装，再运行 scripts/doctor.py 检查环境，最后告诉我版本变化。',
         '',
         '手动更新：备份旧技能目录 → 下载并解压最新 ZIP → 用其中的 SKILL.md、scripts、assets、references、agents、VERSION 替换旧文件。',
         '完整说明见 docs/UPDATE.md（仓库内）。',
@@ -49,6 +49,13 @@ def main():
     try:sys.stdout.reconfigure(encoding='utf-8',errors='replace')
     except (AttributeError,ValueError):pass
     current=local_version()
+    try:
+        from check_install import check
+        installation=check(Path(__file__).resolve().parents[1])
+    except ImportError:
+        installation={'status':'incomplete_install','errors':['缺少完整性检查脚本']}
+    if installation['status']!='complete':
+        print(json.dumps({'status':'incomplete_install','installed_version':current,'installation':installation,'message':'未完整安装，不能依据 VERSION 宣称更新成功；按 docs/UPDATE.md 获取完整包。'},ensure_ascii=False,indent=2));return 1
     latest=None;error=None
     if not args.offline:
         try:latest,_=latest_release()

@@ -10,6 +10,8 @@ def make(base, output):
     base=Path(base).resolve();base.mkdir(parents=True,exist_ok=True)
     d=json.loads((ROOT/'examples/demo-reading.json').read_text(encoding='utf-8'))
     original=d['sections'][0]
+    d['features']={'culture_background':True}
+    original['culture_background']=[{'title':'合成控件测试卡（非教学事实）','paragraph_id':'A-p1','quote':original['paragraphs'][0]['text'][:10],'explanation':'此卡仅测试折叠和定位。','teaching_note':'不用于课堂知识。','sources':[{'title':'项目测试说明','url':'https://github.com/hututu-ai/english-exam-studio'}]}]
     def section(sid,kind,ids):
         raw=json.dumps(original,ensure_ascii=False).replace('A-p',sid+'-p')
         for old,new in zip(['21','22'],ids):raw=raw.replace('"'+old+'"','"'+new+'"')

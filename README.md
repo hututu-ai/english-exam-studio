@@ -8,6 +8,20 @@
 
 [**下载 Skill 安装包**](https://github.com/hututu-ai/english-exam-studio/releases/latest/download/english-exam-studio.zip) · [查看最新版本](https://github.com/hututu-ai/english-exam-studio/releases/latest) · [常见问题](docs/FAQ.md) · [反馈问题](https://github.com/hututu-ai/english-exam-studio/issues)
 
+## 1.0.13：完整安装检查、按需精听与教师修订
+
+- 安装或更新后逐文件校验，避免只下载了几份文字文件就宣布成功。网络白名单阻止完整包下载时明确说明“尚未完整安装”，不让 Windows 老师运行 `.sh` 脚本。
+- 首次先选 **独立听力精听 / 整卷讲评 / 指定板块**，再选 **课堂工具、速对答案、写作迁移、篇章精读、文化背景**。没选的扩展不生成、不显示入口；基础讲评与备课编辑保留。
+- 已有同源 SRT/VTT/带时间 JSON，可直接导入，跳过 Whisper。只有纸面原文时仍需听音确认或对齐；完全缺少对齐能力时如实交付基础原音版，不能称为已完成逐题精听。
+- 备课编辑可改本班答案、题型、解析、步骤、选项辨析和方法迁移；保留原参考答案，修订与速对答案同步，支持课堂记录保存、导出和恢复。老师改步骤不必凑满三条。
+- 可选文化背景解读：结合原文精选、有来源、默认折叠；没有必要的背景不硬加。
+
+直接发给 Agent：
+
+> 使用英语实战讲评 Skill。先问我做独立精听、整卷还是指定板块，再问需要哪些扩展功能。记录我的选择，按固定模板生成并检查。
+
+具体说明：[安装与更新](docs/UPDATE.md) · [功能选择与备课编辑](references/teacher-options.md) · [没有 Whisper 怎么办](references/listening-alternatives.md)。操作系统回归与具体 WorkBuddy/豆包宿主实测分别记录，不能保证每种预览容器都可运行。
+
 ## 1.0.12：防止“打开后点不动”
 
 修复缺少系统朗读能力、异常旧课堂记录、旧浏览器弹窗、画笔能力缺失引发的操作错误；修复鼠标悬停后再点击章节入口时菜单立即关闭的问题。保留顶部六类导航、Test 题组、字号、速对答案及原有教师功能。

@@ -131,3 +131,7 @@ legacy_dictionary为可选的用户自有词库、一词多义与考点笔记，
 {"color":"amber","label":"回指愿望","explanation":"this pursuit 概括上文的创作追求。","endpoints":[{"paragraph_id":"S-p1","quote":"long to become social media creators"},{"option":"B","quote":"this pursuit"}]}
 ```
 颜色为amber/violet/teal/blue；每组至少两个端点，并包含原文端点和选项端点。quote必须逐字存在，不能用释义代替可定位的引文。模板统一生成配色和编号。“显示线索”是显性教学提示，默认关闭。选项排除、备选库选择、解析标签及Canvas笔迹属于课堂记录ui字段，不修改exam.json里的标准答案。
+
+## 可选功能（1.0.13）
+
+根字段 features: classroom_tools、quick_answers、writing_transfer、deep_reading、culture_background，值为布尔。新生成使用 --plan 引入教师选择；旧数据不带字段时兼容原功能。文化背景的数据结构与计划示例见 [教师选项](teacher-options.md)。关闭写作迁移/篇章精读时不要求对应 writing_bank/structure；逐题 strategy 方法迁移仍为基础解析，不受写作迁移开关影响。

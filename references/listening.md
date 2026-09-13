@@ -1,3 +1,7 @@
+# 听力处理
+
+无 Whisper 先读 [替代路径](listening-alternatives.md)，支持同源 SRT/VTT/JSON 导入，不必重新转写。
+
 # 听力执行细节
 
 Python 3 + ffmpeg + ffprobe；ASR 使用 whisper-cli 和本地模型，或复用带时间转写。--model 或 WHISPER_MODEL 指向实际模型。先在当前环境寻找可用模型；模型不随包分发，按宿主环境准备。较小模型对专名／口音可能不足，按需用更合适的模型或局部重听复核。

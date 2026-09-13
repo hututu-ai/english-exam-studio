@@ -8,6 +8,7 @@ Fast paths that matter on a teacher laptop:
   cut --resume             re-encode only the clips that are missing or wrong
   cut --allow-unverified   emit audio without semantic verification, recorded as auto_silence
 """
+import wave
 import argparse,concurrent.futures,difflib,hashlib,json,os,re,shutil,subprocess,sys,tempfile
 from pathlib import Path
 from platform_tools import IS_WINDOWS,ffmpeg_bin,ffprobe_bin,force_utf8,install_hints,whisper_bin
@@ -37,6 +38,13 @@ def run(args,timeout=600):
     return r.stdout
 
 def probe(path):
+    if Path(path).suffix.lower()=='.wav':
+        try:
+            with wave.open(str(path),'rb') as f:
+                if f.getcomptype()=='NONE':
+                    if len(f.readframes(f.getnframes()))!=f.getnframes()*f.getsampwidth()*f.getnchannels():raise ValueError('WAV 文件已截断')
+                    return f.getnframes()/f.getframerate()
+        except wave.Error:pass
     return float(run([ffprobe_bin(),'-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',path]))
 
 def dump(path,data):

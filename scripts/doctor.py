@@ -52,6 +52,13 @@ def main():
     force_utf8()
     hints=install_hints()
     report=describe_platform()
+    try:
+        from check_install import check
+        report['installation']=check(Path(__file__).resolve().parents[1])
+    except ImportError:
+        report['installation']={'status':'incomplete_install','errors':['缺少 scripts/check_install.py，未完整安装']}
+    if report['installation']['status']!='complete':
+        print(json.dumps(report,ensure_ascii=False,indent=2));return 1
     report['console_encoding']=(getattr(sys.stdout,'encoding','') or '')
     report['cpu_count']=os.cpu_count() or 1
     report['python_ok']=sys.version_info>=(3,9)
