@@ -10,5 +10,37 @@
     "audio": "repeat.wav",
     "text": "Woman, Shall we visit the museum this afternoon?\nMan, Yes. The exhibition starts at two, but let's leave at eleven so we can have lunch first.\nWoman, Good idea. Should we buy the tickets online?\nMan, No, we can buy them at the ticket office when we arrive.\n Woman, Shall we visit the museum this afternoon?\nMan, Yes. The exhibition starts at two, but let's leave at eleven so we can have lunch first.\nWoman, Good idea. Should we buy the tickets online?\nMan, No, we can buy them at the ticket office when we arrive.\n",
     "provenance": "same synthetic repeated with 2s leading and 3s middle silence"
+  },
+  {
+    "id": "controlled",
+    "audio": "controlled.wav",
+    "text": "The ticket costs fifteen pounds, not fifty pounds. We should leave at eleven so that we can have lunch first. I used to dislike the book, but now I cannot put it down. You do not need to book online. Buy your ticket at the office.",
+    "sentence_reference": [
+      {
+        "text": "The ticket costs fifteen pounds, not fifty pounds.",
+        "start": 2.0010625,
+        "end": 5.1818125,
+        "method": "known separately synthesized sentence; amplitude threshold 300, approximate acoustic boundary"
+      },
+      {
+        "text": "We should leave at eleven so that we can have lunch first.",
+        "start": 6.2335625,
+        "end": 9.01575,
+        "method": "known separately synthesized sentence; amplitude threshold 300, approximate acoustic boundary"
+      },
+      {
+        "text": "I used to dislike the book, but now I cannot put it down.",
+        "start": 10.068875,
+        "end": 13.3108125,
+        "method": "known separately synthesized sentence; amplitude threshold 300, approximate acoustic boundary"
+      },
+      {
+        "text": "You do not need to book online. Buy your ticket at the office.",
+        "start": 14.350625,
+        "end": 17.823375,
+        "method": "known separately synthesized sentence; amplitude threshold 300, approximate acoustic boundary"
+      }
+    ],
+    "provenance": "own separated TTS sentences with known concatenation; approximate acoustic reference"
   }
 ]
