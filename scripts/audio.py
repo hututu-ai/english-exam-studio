@@ -28,20 +28,21 @@ def sha256(path):
         for block in iter(lambda:f.read(1<<20),b''):h.update(block)
     return h.hexdigest()
 
-def run(args,timeout=600):
+def run(args,timeout=600,include_stderr=False):
     try:r=subprocess.run(list(map(str,args)),capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=timeout or 600)
     except FileNotFoundError as error:
         name=str(args[0])
         hint=install_hints().get('ffmpeg') if name.startswith(('ffmpeg','ffprobe')) else install_hints().get('whisper')
         raise ValueError(f'找不到命令 {name}。{hint or ""}') from error
     if r.returncode:raise ValueError(' '.join(map(str,args[:2]))+': '+r.stderr[-2500:])
-    return r.stdout
+    return r.stdout+r.stderr if include_stderr else r.stdout
 
 def probe(path):
     if Path(path).suffix.lower()=='.wav':
         try:
             with wave.open(str(path),'rb') as f:
                 if f.getcomptype()=='NONE':
+                    if f.getnframes()<=0:raise ValueError('WAV 没有可播放的音频帧')
                     if len(f.readframes(f.getnframes()))!=f.getnframes()*f.getsampwidth()*f.getnchannels():raise ValueError('WAV 文件已截断')
                     return f.getnframes()/f.getframerate()
         except wave.Error:pass
@@ -105,14 +106,20 @@ def whisper_supports_no_gpu():
 def whisper_rows(wav,model,language,out_stem,threads,timeout,no_gpu=False,retry=True):
     flags=['-ng'] if (no_gpu or DEVICE['mode']=='cpu') else []
     command=[whisper_exe(),'-m',model,'-f',str(wav),'-l',language,'-oj','-of',str(out_stem),'-np','-t',threads]+flags
-    try:run(command,timeout=timeout or 600)
+    output=Path(str(out_stem)+'.json')
+    if output.exists():output.unlink()
+    try:
+        diagnostic=run(command,timeout=timeout or 600,include_stderr=True)
+        if not output.is_file():raise ValueError('Whisper 未生成转写文件（即使退出码为 0 也不算成功）：'+diagnostic)
     except (ValueError,subprocess.TimeoutExpired) as error:
         if retry and not flags and whisper_supports_no_gpu():
             progress('whisper 的 GPU 后端失败（常见于容器/无显卡/沙箱环境），自动改用 -ng 重新转写')
             DEVICE['mode']='cpu'
             return whisper_rows(wav,model,language,out_stem,threads,timeout,no_gpu=True,retry=False)
         raise
-    return transcript(json.loads(Path(str(out_stem)+'.json').read_text(encoding='utf-8')))
+    rows=transcript(json.loads(output.read_text(encoding='utf-8')))
+    if not rows:raise ValueError('Whisper 返回空转写，不能标为已完成识别')
+    return rows
 
 def quote_matches(quote,rows):
     words=lambda t:re.findall('[a-z]+',str(t).lower())

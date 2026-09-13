@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 必装 | Python 3.9+ | `winget install Python.Python.3.12`，安装时勾选 Add python.exe to PATH |
 | 听力切割 | ffmpeg + ffprobe | `winget install Gyan.FFmpeg`，或 `scoop install ffmpeg` / `choco install ffmpeg-full` |
-| 听力转写（可选） | whisper.cpp 可执行文件 | 下载 whisper.cpp 的 Windows 预编译包（whisper-bin-x64），把解压目录加进 PATH |
+| 听力转写（可选） | whisper.cpp 可执行文件 | 按 whisper-setup.md 协助准备匹配 CPU 架构的便携程序，使用用户目录或 WHISPER_BIN，无需永久改 PATH |
 | 听力转写（可选） | 模型 ggml-base.bin / ggml-small.bin | 放进 `%USERPROFILE%\whisper.cpp\models`，或用环境变量 `WHISPER_MODEL` 指向 |
 | PDF/扫描卷（可选） | poppler（pdftotext/pdftoppm）、tesseract | `scoop install poppler tesseract` 等 |
 
@@ -24,7 +24,7 @@
 
 ### 3. Windows 上没有的 mac 能力
 
-- 没有 `say` 命令：不要用系统语音合成生成听力素材，转写一律走 whisper.cpp；确实没有转写环境时用 `analyze --no-asr` 的静音分段档。
+- 没有 `say` 命令：不要用系统语音合成生成听力素材，优先可用本地转写或同源字幕；缺 Whisper 时先协助安装并试转短音频，受限时按教师选择的替代路径继续。
 - 没有 `sips` / `qlmanage` / `textutil`：PDF 渲染与 OCR 改用 poppler、tesseract 或 LibreOffice（`soffice`）。DOCX 仍可用 `scripts/extract.py`（纯标准库）。
 - 路径含空格或中文时，命令里用双引号包住，例如 `py -3 scripts/build.py "D:\课件\exam.json" "D:\输出\lesson"`。
 

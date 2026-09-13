@@ -29,7 +29,7 @@ description: 将英语试卷、参考答案与听力音频制作成可离线使�
 python3 scripts/doctor.py --minutes 已知听力时长
 ```
 
-先给出环境结论：ffmpeg/ffprobe/whisper-cli 与本地模型是否存在、PDF 与 OCR 工具是否可用、建议并发数、粗估转写耗时，以及本次该走哪一档听力方案。命令缺失时按输出给出的替代路径继续做成品，不要停在安装依赖上：任何联网安装、模型下载超过约 2 分钟就改走降级方案，并如实说明未做的那一项。默认节奏是**先出一份能上课的完整课件，再增强**：材料识别 → 内容与答案 → 构建 → 浏览器验收，中途任何一步失败都先报告已完成到什么程度，不让流程静默卡住。
+先给出环境结论：ffmpeg/ffprobe/whisper-cli 与本地模型是否存在、PDF 与 OCR 工具是否可用、建议并发数、粗估转写耗时，以及本次该走哪一档听力方案。命令缺失时先按 [Whisper 准备](references/whisper-setup.md) 在授权范围内安装并做短音频验证；有同源字幕时可跳过 Whisper。首次联网准备预算约 2 分钟，超时后报告进度，让老师选择延长或替代方案，不能未经同意把精听降级。默认节奏是**先出一份能上课的完整课件，再增强**：材料识别 → 内容与答案 → 构建 → 浏览器验收，中途任何一步失败都先报告已完成到什么程度，不让流程静默卡住。
 
 省时间的三个默认做法：用 `scripts/scaffold.py` 把原卷文字和答案一次性搬进台账与 exam.json 骨架，只有教学解析需要自己写；听力分段用并发与复用（见第二节）；改一处内容只重跑构建，不重做识别与转写。默认内嵌听力，目录模式由用户按文件体积需要选择，见范围与提速文档。
 
@@ -47,7 +47,7 @@ python3 scripts/doctor.py --minutes 已知听力时长
 
 ## 跨平台与手机打开（Windows 老师同样可用）
 
-读取 [Windows 与手机适配](references/platforms.md)。脚本在 Windows / macOS / Linux 上同一套代码：可执行文件按 `whisper-cli(.exe)`、`whisper(.exe)`、`main(.exe)` 依次查找，控制台强制 UTF-8 输出（避免中文报错在 cp936/cp1252 上崩掉），跨盘符路径自动退回绝对路径。Windows 上先复用已有 ffmpeg，缺少时再按权限准备，转写用 whisper.cpp；没有转写环境就按第二节的三档降级，不要卡在安装上。
+读取 [Windows 与手机适配](references/platforms.md)。脚本在 Windows / macOS / Linux 上同一套代码：可执行文件按 `whisper-cli(.exe)`、`whisper(.exe)`、`main(.exe)` 依次查找，控制台强制 UTF-8 输出（避免中文报错在 cp936/cp1252 上崩掉），跨盘符路径自动退回绝对路径。Windows 上先复用已有 ffmpeg，缺少时再按权限准备，转写用 whisper.cpp；没有转写环境先协助安装并短音频验证，受限后由老师选择延长或替代路径，不静默降级。
 
 成品在手机上的两个真实坑要主动避免：一是文件夹模式下只发送 HTML 导致媒体缺失；默认内嵌模式已把听力写入 HTML，但原卷页图仍需随包传递；二是用微信内置浏览器打开本地 HTML，容易白屏或显示成源码。模板已加兼容层（补齐 `Array.at`、`matchAll`、`flatMap`、`Object.fromEntries`、`dialog.showModal`，隐藏未打开的弹窗，脚本没跑起来时显示中文提示而不是空白页），交付说明里要写清：整个文件夹一起拷贝、用系统浏览器打开、微信里选「用其他应用打开」、投屏上课建议用电脑。
 
@@ -108,7 +108,7 @@ python3 scripts/answer_audit.py WORK/exam.json --ledger WORK/source-ledger.json 
 
 ## 二、自动分段与精听
 
-先看 [无 Whisper 的听力路径](references/listening-alternatives.md)。有同源字幕可直接导入并裁剪，无需 Whisper；只有纸面原文仍需回听或对齐。独立精听是正式生成范围，降级整卷原音不算完成独立精听。
+先看 [无 Whisper 的听力路径](references/listening-alternatives.md)。有同源字幕可直接导入并裁剪，无需 Whisper；缺工具则先协助安装并试转短录音，只有纸面原文仍需回听或对齐。独立精听是正式生成范围，降级整卷原音不算完成独立精听。
 
 有音频时读取 [听力流程](references/listening.md)。先分析，智能体结合转写、题号提示、题意、停顿生成清单，再精确裁剪。
 

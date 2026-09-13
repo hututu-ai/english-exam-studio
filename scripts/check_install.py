@@ -6,7 +6,7 @@ from pathlib import Path, PurePosixPath
 REQUIRED = ['SKILL.md','VERSION','assets/lesson.html','assets/template-manifest.json',
  'assets/offline-dictionary.json','scripts/build.py','scripts/audio.py',
  'scripts/doctor.py','scripts/verify_output.py','scripts/browser_check.cjs',
- 'scripts/check_install.py','scripts/preferences.py','references/schema.md']
+ 'scripts/check_install.py','scripts/prepare_whisper.py','scripts/import_timed_text.py','scripts/preferences.py','references/schema.md']
 
 def check(root):
     root=Path(root).resolve(); errors=[]

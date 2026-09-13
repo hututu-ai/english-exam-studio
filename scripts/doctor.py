@@ -95,7 +95,8 @@ def main():
     elif report['capability']=='silence_only':
         if whisper and not report['recommended_model']:notes.append('有 whisper 可执行文件但没找到本地模型：'+hints['model'])
         else:notes.append('whisper.cpp 未就绪（未找到或无法运行）：'+hints['whisper'])
-        notes.append('仍可用静音分段（analyze --no-asr + cut --allow-unverified）：听力音频照常嵌入，边界标为待人工核对。禁止因此删掉听力。')
+        notes.append('优先按 references/whisper-setup.md 协助准备 Whisper 并试转短音频；已有同源字幕则跳过安装。')
+        notes.append('经老师接受后仍可用静音分段（analyze --no-asr + cut --allow-unverified）：听力音频照常嵌入，边界标为待人工核对。禁止因此删掉听力。')
     else:
         notes.append('ffmpeg/ffprobe 未就绪（缺失、不能运行或缺少 MP3 编码器）：优先复用可用便携工具，按依赖恢复文档准备。')
         notes.append('暂不切割或转码：可接入完整原音并明确标注未分段；需用浏览器验证原音格式能播放，不能仅凭复制成功宣称可播放。')
@@ -109,7 +110,7 @@ def main():
     report['dependency_budget_seconds']=120
     report['dependency_failure_policy']='stop_download_continue_available_sections; see references/dependency-recovery.md'
     python_cmd='py -3' if report['family']=='windows' else 'python3'
-    report['next_step']={'full_auto':python_cmd+' scripts/audio.py analyze AUDIO --out WORK_AUDIO','silence_only':python_cmd+' scripts/audio.py analyze AUDIO --out WORK_AUDIO --no-asr','no_ffmpeg':'在 exam.json 里直接指向原始音频文件，再跑 build.py'}[report['capability']]
+    report['next_step']={'full_auto':python_cmd+' scripts/audio.py analyze AUDIO --out WORK_AUDIO','silence_only':python_cmd+' scripts/prepare_whisper.py','no_ffmpeg':'在 exam.json 里直接指向原始音频文件，再跑 build.py'}[report['capability']]
     text=json.dumps(report,ensure_ascii=False,indent=2)
     if a.json:print(text)
     else:

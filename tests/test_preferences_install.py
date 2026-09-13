@@ -15,14 +15,14 @@ class AddedWorkflows(unittest.TestCase):
             (root/'assets/lesson.html').write_text('broken')
             self.assertEqual(check_install.check(root)['status'],'incomplete_install')
     def test_selected_features_and_pending_plan(self):
-        d=json.loads((ROOT/'examples/demo-reading.json').read_text())
+        d=json.loads((ROOT/'examples/demo-reading.json').read_text(encoding='utf-8'))
         plan={'confirmed':True,'sections':'reading','mode':'lesson','features':{k:False for k in preferences.DEFAULTS}}
         with self.assertRaisesRegex(ValueError,'询问'):preferences.apply_plan(d,{**plan,'confirmed':False})
         with self.assertRaises(ValueError):preferences.apply_plan(d,{**plan,'features':{'quick_answers':False}})
         with tempfile.TemporaryDirectory() as t:
             p=Path(t)/'plan.json';p.write_text(json.dumps(plan))
             with contextlib.redirect_stdout(io.StringIO()):build.build(ROOT/'examples/demo-reading.json',Path(t)/'output',ROOT/'examples/source-ledger.json',plan=p)
-            result=json.loads((Path(t)/'output/exam.json').read_text())
+            result=json.loads((Path(t)/'output/exam.json').read_text(encoding='utf-8'))
             self.assertNotIn('writing_bank',result['sections'][0]);self.assertNotIn('structure',result['sections'][0])
             self.assertTrue(result['sections'][0]['questions'][0]['strategy'])
             result['features']['culture_background']=True

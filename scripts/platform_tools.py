@@ -6,7 +6,7 @@ Windows notes that actually bite:
   * a legacy console is cp936/cp1252, so printing Chinese raises UnicodeEncodeError
   * ffmpeg is usually installed by winget/scoop/choco but not always on PATH
 """
-import os,shutil,sys
+import json,os,shutil,sys
 from pathlib import Path
 
 IS_WINDOWS=os.name=='nt'
@@ -19,9 +19,19 @@ def force_utf8():
         try:handle.reconfigure(encoding='utf-8',errors='replace')
         except (AttributeError,ValueError):pass
 
+def runtime_root():
+    return Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local'))/'english-exam-studio' if IS_WINDOWS else Path.home()/'.cache/english-exam-studio'
+
 def find_tool(*names):
     for name in names:
         key={'ffmpeg':'FFMPEG_BIN','ffprobe':'FFPROBE_BIN'}.get(name)
+        if name in WHISPER_NAMES:
+            configured=os.environ.get('WHISPER_BIN')
+            if configured and Path(configured).is_file():return str(Path(configured).resolve())
+            try:
+                record=json.loads((runtime_root()/'runtime.json').read_text(encoding='utf-8'));candidate=Path(record.get('whisper_bin',''))
+                if candidate.is_file():return str(candidate.resolve())
+            except (OSError,ValueError,TypeError):pass
         if key and os.environ.get(key):
             configured=Path(os.environ[key]).expanduser()
             if configured.is_file():return str(configured.resolve())
@@ -51,6 +61,7 @@ def model_dirs():
     home=os.path.expanduser('~')
     extra=os.environ.get('WHISPER_MODEL_DIR')
     dirs=[
+        str(runtime_root()/'models'),
         os.environ.get('WHISPER_MODEL_INCLUDE') or '',
         extra or '',
         os.path.join(home,'whisper.cpp','models'),

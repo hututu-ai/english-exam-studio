@@ -2,6 +2,10 @@
 
 Whisper 是可选转写后端，不是课件播放器的依赖。Windows 与 macOS 使用同一 Python 流程；不要求 Windows 老师运行 `.sh`、brew、sudo 或照抄容器 `/root/...` 路径。
 
+## 缺工具先协助安装，不直接降级
+
+选了听力且没有现成可用转写/同源字幕时，先读 [Whisper 准备](whisper-setup.md)。说明下载内容、位置与预计体积，在用户授权范围内协助准备并试转短录音；成功后继续完成逐题精听。不因缺 Whisper 就立即交付基础原音版。
+
 ## 按材料选路径
 
 1. **有同一录音的带时间字幕 SRT / VTT / JSON**：用 `scripts/import_timed_text.py AUDIO SUBTITLES --out WORK_AUDIO/transcript.json --same-recording-confirmed` 统一格式，复用其时间轴。该命令不启动 Whisper；仅校验格式、实际音频时长和指纹，不代表字幕内容已经回听。接着用题意及实际回听生成题组、逐题清单，直接 `audio.py cut`，不必重跑 analyze。录音剪过头尾、加过片头或变过速就不是相同时间轴。
