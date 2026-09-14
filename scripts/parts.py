@@ -11,7 +11,7 @@ different sections at the same time and make each repair local.
 """
 import argparse,json,sys
 from pathlib import Path
-from platform_tools import force_utf8
+from platform_tools import explain_error,force_utf8
 
 def split(exam_path,out,force=False):
     exam=json.loads(Path(exam_path).read_text(encoding='utf-8'))
@@ -43,15 +43,31 @@ def load_parts(directory):
     return meta,sections,extra
 
 def check(directory):
+    """合并前体检：只管"合并会不会出事"，不替构建做内容要求。
+
+    以前这里把"每节都要有 paragraphs 和 questions"当成错误，于是**配对阅读、书面表达、纯题目节**
+    这类本来就没有原文的节全都报"缺少 paragraphs"——老师在正常卷子上先撞一次假失败。
+    现在：题号重复/缺失、没写 kind、没有小题才算问题；没有原文段落只作提示（有原文的节要自己补）。
+    """
     meta,sections,extra=load_parts(directory)
-    problems=[]
+    problems=[];notes=[];seen={}
     for section in sections:
-        if section.get('id') not in meta['section_order']:problems.append(f"{section.get('id')}: 不在 _meta 的 section_order 里")
-        if not section.get('paragraphs'):problems.append(f"{section.get('id')}: 缺少 paragraphs")
-        if not section.get('questions'):problems.append(f"{section.get('id')}: 缺少 questions")
+        sid=section.get('id')
+        if sid not in meta['section_order']:problems.append(f"{sid}: 不在 _meta 的 section_order 里")
+        if not str(section.get('kind') or '').strip():problems.append(f"{sid}: 缺少 kind——这一节在原卷上叫什么题型就写什么")
+        questions=section.get('questions') or []
+        if not questions:
+            problems.append(f"{sid}: 还没有小题（questions 为空）。原卷有题号的节（含写作）都要有对应小题，构建也会因此拒绝，先补上再 merge")
+        for question in questions:
+            qid=str((question or {}).get('id') or '').strip()
+            if not qid:problems.append(f"{sid}: 有小小题没有 id（每题都要留原卷题号）")
+            elif qid in seen:problems.append(f"题号 {qid} 同时出现在 {seen[qid]} 与 {sid}：合并后构建会报题号重复，先核对原卷")
+            else:seen[qid]=sid
+        if not section.get('paragraphs'):
+            notes.append(f"{sid}: 没有原文段落——配对阅读/书面表达/纯题目节属正常；这一节若原卷有原文，请补 paragraphs")
     return {'sections':len(sections),'questions':sum(len(s.get('questions',[])) for s in sections),
-            'files_to_merge':[f"{s['id']}.json" for s in sections],'unused_files':extra,'problems':problems,
-            'status':'ok' if not problems else 'needs_fix'}
+            'files_to_merge':[f"{s['id']}.json" for s in sections],'unused_files':extra,
+            'problems':problems,'notes':notes,'status':'ok' if not problems else 'needs_fix'}
 
 def merge(directory,out):
     meta,sections,extra=load_parts(directory)
@@ -76,7 +92,7 @@ def main():
     x=sub.add_parser('merge');x.add_argument('parts');x.add_argument('--out',required=True);x.set_defaults(func=lambda a:merge(a.parts,a.out))
     a=p.parse_args()
     try:result=a.func(a)
-    except (OSError,ValueError,KeyError,json.JSONDecodeError) as e:sys.exit(f'ERROR: {e}')
+    except (OSError,ValueError,KeyError,json.JSONDecodeError) as e:sys.exit(f'ERROR: {explain_error(e)}')
     print(json.dumps(result,ensure_ascii=False,indent=2))
     return 1 if result.get('status')=='needs_fix' else 0
 

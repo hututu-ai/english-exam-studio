@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run an approved dependency command with a deadline; never installs by itself."""
 import argparse, os, signal, subprocess, sys
-from platform_tools import force_utf8
+from platform_tools import explain_error,force_utf8
 
 def run(command, seconds=120):
     if not command:raise ValueError('缺少命令；在 -- 后传入已获准执行的命令及参数')
@@ -30,6 +30,6 @@ def main():
     if not 0<a.seconds<=180:p.error('超时范围为 0–180 秒')
     command=a.command[1:] if a.command[:1]==['--'] else a.command
     try:code,out,err=run(command,a.seconds)
-    except (OSError,ValueError,subprocess.SubprocessError) as e:p.exit(1,f'ERROR: {e}\n')
+    except (OSError,ValueError,subprocess.SubprocessError) as e:p.exit(1,f'ERROR: {explain_error(e)}\n')
     print(out,end='');print(err,end='',file=sys.stderr);return code
 if __name__=='__main__':raise SystemExit(main())

@@ -6,10 +6,32 @@ Windows notes that actually bite:
   * a legacy console is cp936/cp1252, so printing Chinese raises UnicodeEncodeError
   * ffmpeg is usually installed by winget/scoop/choco but not always on PATH
 """
-import json,os,shutil,sys
+import json,os,re,shutil,sys
 from pathlib import Path
 
 IS_WINDOWS=os.name=='nt'
+CJK=re.compile(r'[\u4e00-\u9fff]')
+
+def explain_error(error,next_step=''):
+    """把异常转成老师能照做的一句中文，别把英文 errno 直接甩给人。
+
+    真发生过：`verify_output.py` 指着不存在的输出目录时报 `[Errno 2] No such file or directory:
+    '.../index.html'`，`package_lesson.py` 连 `ERROR:` 前缀都没有——老师与助手都看不出"该先构建"
+    还是"路径写错了"。这里统一成"找不到什么 + 最可能的原因 + 下一步"；已经是中文的说明原样保留。
+    """
+    hint=f'（{next_step}）' if next_step else ''
+    path=getattr(error,'filename',None) or getattr(error,'filename2',None)
+    if isinstance(error,FileNotFoundError):
+        return f'找不到文件或目录：{path if path else error}；请确认路径、文件名大小写与相对位置，并确认上一步是否真的生成过它'+hint
+    if isinstance(error,PermissionError):
+        return f'没有权限读写：{path if path else error}；请换一个有写权限的目录（Windows 上避开系统盘受保护目录），或先关闭占用该文件的程序'+hint
+    if isinstance(error,IsADirectoryError):
+        return f'这里需要文件但给的是目录：{path if path else error}；请指到具体文件（例如 …/exam.json，而不是它所在的文件夹）'+hint
+    if isinstance(error,NotADirectoryError):
+        return f'路径中间有一段不是目录：{path if path else error}；请检查路径拼写'+hint
+    text=str(error).strip() or type(error).__name__
+    if CJK.search(text):return text+hint          # 已经是中文说明，原样保留
+    return f'处理时出错（{type(error).__name__}）：{text}'+hint
 
 def force_utf8():
     """Make stdout/stderr UTF-8 so Chinese output never crashes a Windows console."""

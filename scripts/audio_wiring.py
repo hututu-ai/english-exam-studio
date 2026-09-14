@@ -6,6 +6,7 @@ state as the build, otherwise it reports a missing-listening error that the buil
 """
 import hashlib,json,os
 from pathlib import Path
+import section_kinds
 
 def sha256(path):
     h=hashlib.sha256()
@@ -39,24 +40,28 @@ def question_bundle(directory):
     return None
 
 def find_transcript(directory,src_dir,full):
-    """Pick the transcript whose source_audio_sha256 matches this exact recording."""
+    """Pick the transcript whose source_audio_sha256 matches this exact recording.
+
+    算不出本次录音的指纹时（整卷原音缺失）不猜：宁可这一节没有转写指针，也不把另一段录音的转写挂上来。
+    """
+    target=sha256(full) if full and Path(full).is_file() else None
+    if target is None:return None
     candidates=[]
     if directory:
         candidates+=[directory/'transcript.json',directory.parent/'transcript.json']
         candidates+=sorted(directory.parent.glob('*/transcript.json'))+sorted(directory.glob('*/transcript.json'))
     candidates+=sorted(Path(src_dir).glob('*/transcript.json'))
-    target=sha256(full) if full and Path(full).is_file() else None
     for candidate in candidates:
         if not candidate.is_file():continue
         try:data=json.loads(candidate.read_text(encoding='utf-8'))
         except (OSError,ValueError):continue
-        if target is None or data.get('source_audio_sha256')==target:return candidate
+        if data.get('source_audio_sha256')==target:return candidate
     return None
 
 def wire_audio(d,src_dir,directory):
     """Fill every audio path from the bundle so listening always reaches the HTML."""
     report={'bundle':str(directory) if directory else None,'sections':[],'pending':[],'questions_with_clip':0,'mode':None}
-    listening=[s for s in d.get('sections',[]) if s.get('kind')=='listening']
+    listening=[s for s in d.get('sections',[]) if section_kinds.is_listening(s)]
     text_bundle=read_segments(directory/'segments.json','text') if directory and (directory/'segments.json').is_file() else None
     qpath=question_bundle(directory)
     question_bundle_data=read_segments(qpath,'question') if qpath else None
@@ -64,8 +69,13 @@ def wire_audio(d,src_dir,directory):
     if text_bundle:
         full=Path(text_bundle['full_audio'])
         full=full if full.is_absolute() else (directory/full).resolve()
-        if full.is_file() and not d.get('full_audio'):d['full_audio']=rel(full,src_dir)
+        full_on_disk=full.is_file()
+        if full_on_disk and not d.get('full_audio'):d['full_audio']=rel(full,src_dir)
         transcript=find_transcript(directory,src_dir,full)
+        if transcript is None:
+            why=('切段清单写的整卷原音不在磁盘上（'+str(full)+'），无法核对转写来自哪段录音' if not full_on_disk
+                 else '附近的转写都不是这段原音产生的（source_audio_sha256 不匹配）')
+            report['pending'].append('未附转写证据：'+why+'；请恢复原音或重跑转写后再交付')
     segments_by_id={str(s['id']):s for s in (text_bundle or {}).get('segments',[])}
     for section in listening:
         if section.get('audio'):continue
@@ -79,14 +89,17 @@ def wire_audio(d,src_dir,directory):
             section['audio']=rel(directory/segment['audio'],src_dir)
             section['audio_duration']=round(float(segment.get('duration') or 0),3)
             section['audio_scope']='text'
-            alignment={'mode':text_bundle.get('verification_mode','verified'),'boundary':'verified' if segment.get('verified') else 'auto_silence',
+            alignment={'mode':text_bundle.get('verification_mode'),'boundary':'verified' if segment.get('verified') else 'auto_silence',
                        'full_start':segment['start'],'full_end':segment['end'],
                        'opening_quote':segment.get('opening_quote',''),'closing_quote':segment.get('closing_quote',''),
                        'transcript_text':segment.get('transcript_text','')}
             if transcript:
                 alignment['transcript_file']=rel(transcript,src_dir)
                 alignment['transcript_sha256']=sha256(transcript)
-            section['audio_alignment']={k:v for k,v in alignment.items() if v!=''}
+            # 不补默认值：清单没声明 verification_mode 时不替它写 verified（页面按 mode=unsegmented 标「整卷原音」，凭空补 verified 会让页面看不出未核对）。
+            section['audio_alignment']={k:v for k,v in alignment.items() if v not in ('',None)}
+            if 'mode' not in section['audio_alignment']:
+                report['pending'].append(f"{section['id']}：切段清单没有声明 verification_mode，无法说明切点是人工核对还是静音自动分段；页面按 boundary 显示，边界核对责任不清")
             report['sections'].append({'section':section['id'],'mode':'text_clip','file':segment['audio'],'verification':segment.get('verified')})
             if not segment.get('verified'):
                 report['pending'].append(f"{section['id']}：音频边界为静音自动分段，需人工试听首尾")

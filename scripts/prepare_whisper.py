@@ -30,14 +30,14 @@ def fetch(url,target=None,deadline=None):
 
 def safe_name(name):
     p=PurePosixPath(name)
-    if p.is_absolute() or '..' in p.parts or '\\' in name or ':' in name:raise ValueError('Unsafe archive path: '+name)
+    if p.is_absolute() or '..' in p.parts or '\\' in name or ':' in name:raise ValueError('压缩包里出现不安全的路径（绝对路径、越界 .. 、反斜杠或盘符冒号），已拒绝：'+name)
     return bool(p.parts) and all(not x.startswith('.') and x!='__MACOSX' for x in p.parts)
 
 def unpack(archive,dest):
     dest=Path(dest);dest.mkdir(parents=True,exist_ok=True)
     if zipfile.is_zipfile(archive):
         with zipfile.ZipFile(archive) as z:
-            if sum(x.file_size for x in z.infolist())>2_000_000_000:raise ValueError('Archive unexpectedly large')
+            if sum(x.file_size for x in z.infolist())>2_000_000_000:raise ValueError('压缩包解压后体积异常（超过 2GB），已停止；请确认下载的是官方运行时')
             for info in z.infolist():
                 if not safe_name(info.filename) or stat.S_ISLNK(info.external_attr>>16):continue
                 p=dest/info.filename
@@ -46,7 +46,7 @@ def unpack(archive,dest):
     else:
         with tarfile.open(archive) as t:
             members=t.getmembers()
-            if sum(x.size for x in members)>2_000_000_000:raise ValueError('Archive unexpectedly large')
+            if sum(x.size for x in members)>2_000_000_000:raise ValueError('压缩包解压后体积异常（超过 2GB），已停止；请确认下载的是官方运行时')
             for info in members:
                 if not safe_name(info.name) or not info.isfile():continue
                 p=dest/info.name;p.parent.mkdir(parents=True,exist_ok=True)
@@ -55,13 +55,13 @@ def unpack(archive,dest):
 
 def run(command,deadline):
     command=list(map(str,command));code,out,err=run_bounded(command,remaining(deadline))
-    if code:raise RuntimeError(json.dumps({'command':command,'exit_code':code,'stderr':err,'stdout':out},ensure_ascii=False))
+    if code:raise RuntimeError('外部命令失败（退出码 '+str(code)+'）：'+json.dumps({'command':command,'stderr':err,'stdout':out},ensure_ascii=False))
     return out+err
 
 def windows_asset(releases,machine):
     names={'amd64':'whisper-bin-x64.zip','x86_64':'whisper-bin-x64.zip','arm64':'whisper-bin-arm64.zip','aarch64':'whisper-bin-arm64.zip'}
     expected=names.get(machine.lower())
-    if not expected:raise ValueError('Unsupported Windows architecture: '+machine)
+    if not expected:raise ValueError('不支持这个 Windows 架构，无法自动准备 whisper 运行时：'+machine+'（支持 amd64/x86_64/arm64/aarch64）')
     for release in releases:
         if release.get('prerelease') or release.get('draft'):continue
         for a in release.get('assets',[]):
@@ -93,9 +93,9 @@ def prepare(root,install=False,seconds=120):
             if os.name=='nt':
                 release,asset=windows_asset(fetch(REPO+'/releases?per_page=15',deadline=deadline),platform.machine())
                 archive=fetch(asset['browser_download_url'],temp/'runtime.zip',deadline)
-                if hashlib.sha256(archive.read_bytes()).hexdigest()!=asset['digest'][7:]:raise ValueError('Whisper archive checksum mismatch')
+                if hashlib.sha256(archive.read_bytes()).hexdigest()!=asset['digest'][7:]:raise ValueError('whisper.cpp 运行时压缩包校验失败：下载内容与官方 digest 不一致，已丢弃；请检查网络或代理后重试')
                 tag=release['tag_name']
-                if not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',tag):raise ValueError('Invalid release tag')
+                if not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',tag):raise ValueError(f'官方 release tag 含意外字符，已拒绝用作目录名：{tag!r}')
                 target=root/('whisper-'+tag)
                 if target.exists():raise ValueError('目标运行时已存在但未识别为可用；保留旧目录，请诊断而非覆盖')
                 unpack(archive,target);found=list(target.rglob('whisper-cli.exe'))
@@ -107,7 +107,7 @@ def prepare(root,install=False,seconds=120):
                 source=next((p for p in (temp/'source').iterdir() if (p/'CMakeLists.txt').is_file()),None)
                 if source is None:raise ValueError('官方源码不完整')
                 tag=release['tag_name']
-                if not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',tag):raise ValueError('Invalid release tag')
+                if not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',tag):raise ValueError(f'官方 release tag 含意外字符，已拒绝用作目录名：{tag!r}')
                 target=root/('whisper-'+tag)
                 if target.exists():raise ValueError('运行时目录已存在但未识别为可用，保留以便诊断')
                 shutil.copytree(source,target)

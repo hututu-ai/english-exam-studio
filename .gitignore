@@ -1,4 +1,7 @@
+# 系统与编辑器
 .DS_Store
+Thumbs.db
+desktop.ini
 __pycache__/
 *.py[cod]
 .venv/
@@ -6,6 +9,10 @@ venv/
 .env
 .env.*
 !.env.example
+.idea/
+.vscode/
+
+# 老师的工作目录与产物：都不进仓库（要发给老师的 ZIP 走 GitHub Releases）
 input/
 inputs/
 output/
@@ -14,14 +21,26 @@ work/
 tmp/
 dist/
 *.log
+release-check.*
+smoke-report*
+smoke-output/
+first-use-work/
+first-use-report/
+*.zip
+
+# 试卷与听力素材：属于老师的材料，永远不要提交
 *.pdf
 *.docx
 *.doc
-*.zip
 *.aiff
 *.wav
+
+# 密钥与模型权重
 *.pem
 *.key
 ggml-*.bin
 
 node_modules/
+
+# prepare_whisper 的用户目录（正常在 ~/.cache 或 LOCALAPPDATA，这里兜底）
+.cache/

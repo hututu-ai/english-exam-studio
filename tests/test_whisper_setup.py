@@ -1,8 +1,17 @@
-import hashlib,json,os,sys,tempfile,unittest,zipfile
+import hashlib,io,json,os,sys,tarfile,tempfile,unittest,zipfile
 from pathlib import Path
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'scripts'))
-import prepare_whisper as setup
+import extract_package,prepare_whisper as setup
+DEMO_MODEL=b'model-bytes'*100
+DEMO_SHA=hashlib.sha256(DEMO_MODEL).hexdigest()
+def demo_tarball(target):
+    with tarfile.open(target,'w:gz') as t:
+        def add(name,data,mode=0o644):
+            info=tarfile.TarInfo(name);info.size=len(data);info.mode=mode;t.addfile(info,io.BytesIO(data))
+        add('whisper.cpp/CMakeLists.txt',b'project(whisper)')
+        add('whisper.cpp/build/whisper-cli',b'#!/bin/sh\n',0o755)
+    return target
 class WhisperSetup(unittest.TestCase):
     def test_plan_never_downloads_and_explains_location(self):
         with tempfile.TemporaryDirectory() as t,patch.object(setup,'fetch',side_effect=AssertionError('Network unexpected')):
@@ -34,4 +43,80 @@ class WhisperSetup(unittest.TestCase):
             (root/'runtime.json').write_text(json.dumps({'whisper_bin':str(binary),'whisper_model':str(model),'model_sha256':hashlib.sha256(model.read_bytes()).hexdigest()}))
             with patch.object(setup,'run',return_value='help'),patch.object(setup,'fetch',side_effect=AssertionError('Network unexpected')):
                 self.assertTrue(setup.prepare(root,True)['reused'])
+
+    def test_tar_runtime_keeps_exec_bit_and_skips_symlink(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);good=root/'good.tar.gz'
+            with tarfile.open(good,'w:gz') as tar:
+                def add(name,data,mode=0o644,kind=tarfile.REGTYPE):
+                    info=tarfile.TarInfo(name);info.mode=mode;info.type=kind
+                    if kind==tarfile.REGTYPE:info.size=len(data);tar.addfile(info,io.BytesIO(data))
+                    else:info.linkname=data.decode();tar.addfile(info)
+                add('whisper.cpp/build/whisper-cli',b'#!/bin/sh\n',0o755)
+                add('whisper.cpp/README.md',b'read me')
+                add('whisper.cpp/evil',b'/outside',kind=tarfile.SYMTYPE)
+            out=root/'out';setup.unpack(good,out)
+            binary=out/'whisper.cpp/build/whisper-cli'
+            self.assertTrue(binary.is_file());self.assertTrue(binary.stat().st_mode&0o100,'解压后应保留执行位')
+            self.assertFalse((out/'whisper.cpp/evil').exists());self.assertTrue((out/'whisper.cpp/README.md').is_file())
+            with self.assertRaises(ValueError)as caught:
+                bad=root/'bad.tar.gz'
+                with tarfile.open(bad,'w:gz') as tar:
+                    info=tarfile.TarInfo('../outside.txt');info.size=4;tar.addfile(info,io.BytesIO(b'evil'))
+                setup.unpack(bad,root/'escaped')
+            self.assertIn('不安全',str(caught.exception));self.assertFalse((root/'outside.txt').exists())
+
+    def test_macos_prepare_downloads_builds_and_verifies_model(self):
+        calls=[]
+        def fake_fetch(url,target=None,deadline=None):
+            calls.append(url)
+            if 'huggingface.co/api/models' in url:
+                return {'sha':'rev123','siblings':[{'rfilename':'ggml-base.bin','lfs':{'sha256':DEMO_SHA}}]}
+            if 'resolve/' in url:Path(target).write_bytes(DEMO_MODEL);return Path(target)
+            if 'releases/latest' in url:return {'tag_name':'v1.7.4','tarball_url':'http://x/src.tar.gz'}
+            return demo_tarball(Path(target))
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t)/'tools'
+            with patch.object(setup,'fetch',side_effect=fake_fetch),patch.object(setup,'whisper_bin',return_value=None),\
+                 patch.object(setup.shutil,'which',side_effect=lambda name:'/usr/bin/'+name),patch.object(setup,'run',return_value='ok'):
+                report=setup.prepare(root,True,seconds=30)
+            self.assertEqual(report['status'],'ready_for_smoke_test')
+            self.assertNotIn('reused',report)
+            self.assertEqual(report['model_sha256'],DEMO_SHA)
+            self.assertTrue(Path(report['whisper_bin']).is_file())
+            self.assertEqual((root/'models/ggml-base.bin').read_bytes(),DEMO_MODEL)
+            self.assertTrue((root/'runtime.json').is_file())
+            self.assertEqual(list((root/'models').glob('*.download')),[],'校验完成后不应留下半成品')
+            self.assertTrue(any('huggingface' in u for u in calls))
+
+    def test_model_digest_mismatch_refuses_to_install(self):
+        def fake_fetch(url,target=None,deadline=None):
+            if 'huggingface.co/api/models' in url:
+                return {'sha':'rev123','siblings':[{'rfilename':'ggml-base.bin','lfs':{'sha256':'0'*64}}]}
+            if 'resolve/' in url:Path(target).write_bytes(DEMO_MODEL);return Path(target)
+            if 'releases/latest' in url:return {'tag_name':'v1.7.4','tarball_url':'http://x/src.tar.gz'}
+            return demo_tarball(Path(target))
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t)/'tools'
+            with patch.object(setup,'fetch',side_effect=fake_fetch),patch.object(setup,'whisper_bin',return_value=None),\
+                 patch.object(setup.shutil,'which',side_effect=lambda name:'/usr/bin/'+name),patch.object(setup,'run',return_value='ok'):
+                with self.assertRaisesRegex(ValueError,'模型校验失败'):setup.prepare(root,True,seconds=30)
+            self.assertFalse((root/'models/ggml-base.bin').exists())
+            self.assertFalse((root/'runtime.json').exists(),'校验没过就不该写运行时凭据')
+
+    def test_path_safety_rules_agree_across_modules(self):
+        hostile=['/etc/passwd','C:/windows/system32','..\\..\\evil','../outside.txt','a/../../b','','.','.git/config','__MACOSX/x','a/__MACOSX/b','sub\\evil','x:y']
+        benign=['whisper.cpp/build/whisper-cli','models/ggml-base.bin','a/b/c.txt']
+        for name in hostile:
+            with self.subTest(name=name):
+                ok,reason=extract_package.safe_parts(name)
+                self.assertFalse(ok,name+' 应被 extract_package 拒绝')
+                self.assertTrue(reason)
+                try:accepted=setup.safe_name(name)
+                except ValueError:accepted=False
+                self.assertFalse(accepted,name+' 应被 prepare_whisper 拒绝')
+        for name in benign:
+            with self.subTest(name=name):
+                self.assertTrue(extract_package.safe_parts(name)[0])
+                self.assertTrue(setup.safe_name(name))
 if __name__=='__main__':unittest.main()

@@ -10,17 +10,19 @@ WorkBuddy 或豆包工作中，先尝试宿主提供的文件与执行能力，�
 
 ## 最终文件验收
 
-1. 运行 `python scripts/verify_output.py OUTPUT`：文件不能被截断、包在 Markdown 代码块里，或被模型重写脚本。与固定模板不一致时修复生成流程，不修改校验哈希规避。
+1. 运行 `python3 scripts/verify_output.py OUTPUT`：文件不能被截断、包在 Markdown 代码块里，或被模型重写脚本。与固定模板不一致时修复生成流程，不修改校验哈希规避。
 2. 有现成 Node + Playwright 与浏览器时，运行 `node scripts/browser_check.cjs OUTPUT --stress`。脚本最多运行 180 秒，只在本机临时服务打开此输出目录，不访问外部词典、不安装任何依赖。`PLAYWRIGHT_MODULE` 可指向现有 Playwright 模块目录，`CHROME_BIN` 可指定已有 Chrome；`BROWSER_ENGINE` 支持 chromium/firefox/webkit（须有相应浏览器）。无工具时走下一条，不无限下载安装。
 3. 无 Playwright 时，使用宿主可用的浏览器工具逐项操作，按 references/regression.md 记录实际动作、结果和截图位置。至少检查所有章节导航、逐题解析、译文、词句、速对答案（全部/板块）、字号、六主题、批注和课堂工具；有听力时实际播放整段与逐题音频、测试变速；单独复制 HTML 的内嵌音频仍需播放。截图能显示页面，不等于按钮测试通过。
-4. 自动脚本生成 `browser-check.json`，绑定实际 HTML 与音频/页图的 SHA256（`html_sha256`、`media_sha256`）、浏览器版本、检查项目与错误。宿主浏览器验收可保存同格式报告，但必须来自真实操作，明确 `engine`、`checks` 与实际限制。不得手写通过状态代替执行。没有浏览器能力时标 `not_tested`，只交付待验收版。
+4. 自动脚本生成 `browser-check.json`，绑定实际 HTML 与音频/页图的 SHA256（`html_sha256`、`media_sha256`）、浏览器版本、检查项目与错误。宿主浏览器验收可保存同格式报告，但必须来自真实操作，明确 `engine`、`checks` 与实际限制。不得手写通过状态代替执行。没有浏览器能力时标 `not_tested`，只交付待验收版。报告里的 `skipped` 是**未执行**项（功能未开启或课件没有可测数据）：打包报告 `delivery-report.json` 会逐个列出并注明未经验证，不能把跳过读成通过。
 5. 本机 HTTP 自动检查不等于实际 file:// 双击、微信附件预览或 WorkBuddy/豆包完整生成链路通过。若用户反馈恰是这些场景，必须拿到具体文件、打开方式和系统后复测；不得用一个浏览器测试代替全部宿主认证。
 6. 页面或外部媒体经任何修改，旧报告失效；重新构建和验收。音频能响不证明切点正确，仍需回听对应题的证据语境；合成音频只用于控件测试。
+7. 输出目录是交付目录，会随构建更新：缩小范围重建（例如先整卷、后只做阅读 A）时，构建会按自己上一轮生成的清单删除不再需要的音频与页图，避免把上一轮范围的素材一起打包。清单只记录构建自己产出的文件，老师手工放进输出目录的文件不会被删除。不要把工作缓存或个人信息放进交付目录。
 
 ## 打包与下载
 
 - 构建器自动放入 `打开课件.html`，这是不依赖 JavaScript 的打开说明。正常课件启动后隐藏启动提示；脚本不能执行时保留操作指引。
-- 运行 `python scripts/package_lesson.py OUTPUT LESSON.zip`：再次校验模板、媒体字节与浏览器报告对应的文件，检查 ZIP 完整性。ZIP 放在输出目录之外。
+- 打包前先写人工复核清单：`python3 scripts/qa_report.py init OUTPUT` 生成待填条目（原件比对、解析自洽、听力边界、浏览器实际操作、待核项），逐条在 `结论：` 后写明判断，`python3 scripts/qa_report.py check OUTPUT` 返回 `ok`。空结论、`待填` 之类占位文字、缺章节都会被拒绝。
+- 运行 `python3 scripts/package_lesson.py OUTPUT LESSON.zip`：再次校验模板、媒体字节与浏览器报告对应的文件，**并要求 qa-report 已通过**，检查 ZIP 完整性。ZIP 放在输出目录之外。
 - 没有浏览器验收时，仅可显式 `--allow-unchecked` 打包，状态为 `preview_only_browser_check_pending`。交付时用中文写明“待浏览器操作验收”，不能称通过或保证可直接上课。
 - `browser_checked` 仅代表浏览器检查完成，不代替 build-report 的内容待核项、原件比对和音频边界复核。交付说明保留所有待核事项。
 - 最终给老师可下载的完整 ZIP 附件；包含 index.html、打开课件.html、媒体/原卷页图、exam.json、build-report.json、browser-check.json、delivery-report.json 与来源记录。不要只给本机路径、127.0.0.1 链接、源码或截图。云端临时路径必须转换成宿主支持的实际下载附件。

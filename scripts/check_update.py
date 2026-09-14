@@ -22,6 +22,28 @@ def local_version():
 def normalise(tag):
     return re.sub(r'^v','',str(tag or '').strip())
 
+def version_key(version):
+    """Comparable key so 1.0.22 is newer than 1.0.13.
+
+    A pre-release suffix (-dev/-rc/-beta) sorts below the plain release with the same
+    numbers, matching how the project numbers development builds.
+    """
+    text=normalise(version)
+    match=re.match(r'^(\d+(?:\.\d+)*)(?:[-+._]?(dev|alpha|beta|rc|pre)\D*?(\d*))?$',text,re.I)
+    if not match:return None
+    numbers=tuple(([int(x) for x in match.group(1).split('.')]+[0,0,0,0])[:4])
+    prerelease=(match.group(2) or '').lower()
+    return (numbers,0 if prerelease else 1,int(match.group(3) or 0))
+
+def compare(current,latest):
+    """Return 'up_to_date' | 'update_available' | 'newer_than_release' | 'unknown'."""
+    if not latest:return 'unknown'
+    current_key,latest_key=version_key(current),version_key(latest)
+    if current_key is None or latest_key is None:
+        return 'up_to_date' if normalise(current)==normalise(latest) else 'update_available'
+    if current_key==latest_key:return 'up_to_date'
+    return 'update_available' if current_key<latest_key else 'newer_than_release'
+
 def latest_release(timeout=10):
     request=urllib.request.Request(API,headers={'User-Agent':'english-exam-studio-check'})
     with urllib.request.urlopen(request,timeout=timeout) as response:
@@ -61,24 +83,32 @@ def main():
         try:latest,_=latest_release()
         except (urllib.error.URLError,urllib.error.HTTPError,TimeoutError,ValueError,json.JSONDecodeError) as issue:
             error=f'{type(issue).__name__}: {issue}'
-    if latest and current and normalise(current)==latest:
-        status='up_to_date'
-    elif latest:
-        status='update_available'
+    status=compare(current,latest) if latest else 'unknown_remote'
+    if status=='update_available':
+        steps=update_steps()
+    elif status=='newer_than_release':
+        steps=[f'本机 {current} 比公开最新版 {latest} 更新（通常是开发版或抢先版），无需降级；继续使用本机版本即可。',
+               '如果确实要回到公开版，请先备份，再按 docs/UPDATE.md 下载并替换；不要在未备份时覆盖。']
+    elif status=='up_to_date':
+        steps=['已经是最新版，无需更新。']
     else:
-        status='unknown_remote'
+        steps=update_steps()
     payload={'installed_version':current,'latest_version':latest,'status':status,
              'release_page':RELEASE_PAGE,'note':error or '',
-             'update_steps':update_steps() if status!='up_to_date' else ['已经是最新版，无需更新。']}
+             'update_steps':steps}
     if args.json:
         print(json.dumps(payload,ensure_ascii=False,indent=2));return 0
     print(f'当前安装版本：{current}')
     if status=='up_to_date':print(f'最新版本：{latest}（已是最新，无需更新）');return 0
-    if status=='update_available':print(f'最新版本：{latest}（可以更新）')
-    else:print('暂时无法联网核对最新版本（离线或网络受限）')
+    if status=='newer_than_release':
+        print(f'最新版本：{latest}（本机版本更新，无需降级）')
+    elif status=='update_available':
+        print(f'最新版本：{latest}（可以更新）')
+    else:
+        print('暂时无法联网核对最新版本（离线或网络受限）')
     if error:print(f'（联网失败：{error}）')
     print('\n更新方法：')
-    for line in payload['update_steps']:print(('  ' if line and not line.startswith('   ') else '')+line)
+    for line in steps:print(('  ' if line and not line.startswith('   ') else '')+line)
     return 0
 
 if __name__=='__main__':raise SystemExit(main())

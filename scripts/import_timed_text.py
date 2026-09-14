@@ -3,18 +3,26 @@
 import argparse, json, re
 from pathlib import Path
 from audio import sha256, transcript, probe
-from platform_tools import force_utf8
+from exam_document import read_json
+from platform_tools import explain_error,force_utf8
 
 def seconds(value):
     parts=value.replace(',','.').split(':')
-    if len(parts) not in (2,3):raise ValueError('无效字幕时间: '+value)
-    values=[float(x) for x in parts]
-    if values[-1]>=60 or values[-2]>=60 or any(x<0 for x in values):raise ValueError('无效字幕时间: '+value)
+    if len(parts) not in (2,3):raise ValueError(f'字幕时间 {value!r} 不是 mm:ss 或 hh:mm:ss 格式')
+    try:
+        values=[float(x) for x in parts]
+    except ValueError:
+        # 时间行里只允许数字、冒号、点/逗号；出现别的字符时给中文原因，不要让 float() 的英文原文漏给老师。
+        raise ValueError(f'字幕时间 {value!r} 含无法识别的字符；毫秒请写成 00:00:01,000 或 00:00:01.000') from None
+    if values[-1]>=60 or values[-2]>=60 or any(x<0 for x in values):
+        raise ValueError(f'字幕时间 {value!r} 的分钟/秒必须小于 60（冒号后是秒）')
     return sum(v*60**i for i,v in enumerate(reversed(values)))
 
 def parse(path):
     path=Path(path);raw=path.read_text(encoding='utf-8-sig')
-    if path.suffix.lower()=='.json':return transcript(json.loads(raw))
+    if path.suffix.lower()=='.json':
+        data=read_json(path)
+        return transcript(data)
     if path.suffix.lower() not in ('.srt','.vtt'):raise ValueError('支持 SRT / VTT / 带时间 JSON；纯文本不含真实切点')
     rows=[]
     for block in re.split(r'\n\s*\n',raw.replace('\r\n','\n').strip()):
@@ -39,4 +47,4 @@ def convert(audio,subtitles,out,confirmed=False):
 if __name__=='__main__':
     force_utf8();p=argparse.ArgumentParser();p.add_argument('audio');p.add_argument('subtitles');p.add_argument('--out',required=True);p.add_argument('--same-recording-confirmed',action='store_true');a=p.parse_args()
     try:r=convert(a.audio,a.subtitles,a.out,a.same_recording_confirmed);print(json.dumps({'status':'imported_review_required','segments':len(r['segments']),'out':a.out},ensure_ascii=False))
-    except (OSError,ValueError,AssertionError) as e:p.exit(1,'ERROR: '+str(e)+'\n')
+    except (OSError,ValueError,AssertionError) as e:p.exit(1,'ERROR: '+explain_error(e)+'\n')

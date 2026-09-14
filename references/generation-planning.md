@@ -7,7 +7,7 @@
 推荐问题：**这次准备讲哪些内容？**
 
 - 整卷讲评：生成已提供的全部题型。
-- 指定板块：例如听力、阅读 A 和 C、七选五、完形、语法填空、应用文或续写；可多选。
+- 指定板块：按**试卷自己的板块名**说，例如听说应用、语法选择、完形填空、阅读理解 A、配对阅读、短文填空、读写综合、读后续写；可多选。
 - 精听：只处理指定听力 Text，默认展开原文与答案线索挖空，保留题目、整段和逐题录音。
 
 使用宿主的交互式问题控件；没有控件就用一条普通消息让老师回复。没有回答时保留待选状态，不自动开始整卷。材料已齐时，可等待期间检查文件格式、题型目录和环境，不提前全文 OCR、ASR 或编写未选板块。选择“指定板块”但未说具体内容时，再按材料目录询问一次；保留原卷题号和整个 Text 的语境。
@@ -21,14 +21,35 @@
 3. 本次不含听力时不检查或安装 ASR、不读取完整录音、不生成切片。含听力时复用同一原音指纹对应的时间转写；纸质听力原文不等于带时间转写，仍需试听确认边界。
 4. 每节按实际教学价值精选词句与迁移，避免所有单词都编成长词条。需要完整精读时再扩展。保持原文、题目、答案依据与干扰项辨析完整。
 5. 已完成章节用 `parts.py` 局部更新，改文字不重切音频。同长度的新切点不能复用旧音频；缓存必须同时匹配原音指纹和起止时间。
-6. `build-report.json` 记录构建用时；Agent 另记识别、转写、编写解析、构建和浏览器验收用时。没有这些分项数据，不把整卷慢归因于某个模型或承诺固定完成分钟数。
+6. `build-report.json` 记录 `timing`（prepare_audio / validate / quality_gate / answer_audit / render_and_write 各阶段秒数）与 `authoring_cost`（需编写字符数、逐字引文字符数、可改用 quote_ref 的预估节省）。Agent 另记识别、转写、编写解析和浏览器验收用时；没有这些分项数据，不把整卷慢归因于某个模型或承诺固定完成分钟数。
+
+## 省 token 与积分
+
+编写教学解析是唯一无法省掉的部分；能省的是重复读取、逐字抄写和返工。开始写之前先量一次：
+
+```text
+python3 scripts/cost.py WORK/exam.json --plan WORK/generation-plan.json
+```
+
+它给出本次要编写的字符数、逐字引文字符数，以及哪些长引文可以改成 `quote_ref`（按范围引用，由脚本回填）。按下面顺序做：
+
+1. **只写选中的板块**：`--plan`、`scope.py` 或 `--sections` 先筛范围，未选章节不编写、不逐字读取。
+2. **长引文一律用 quote_ref**：写完跑 `python3 scripts/quotes.py fill WORK/exam.json` 回填逐字引文。省下的正是逐字抄写与对不齐后的重试。
+3. **先出可上课版**：材料大、时间紧时用 `--profile quick` 先交付能上课的完整讲评，再补 sentences/structure/writing_bank，最后 `--profile full` 重建。
+4. **复用转写与切片**：同一原音指纹的带时间转写直接复用；重复构建只改文字，不重跑 OCR/ASR、不重切音频。
+5. **分节写、局部改**：`parts.py split` 后每节一个文件，返工只重写一节，再 `merge` 合并；不要把整卷 JSON 贴回对话里改。
+6. **一轮改完校验错误**：构建一次列出本节全部问题，每条中文并带实际值（真实词频、要求/实际选项数、引文与段落 ID），末尾给出下一步。按清单一次改完再重跑——每多一轮返工就多几分钟和一轮 token。
+7. **别把同一段内容写两遍**：`python3 scripts/cost.py WORK/exam.json --duplicates` 会列出逐字重复的引文、跨节完全/近似的解析与重复词条，并给出可省字符；重复引文优先改成 `quote_ref` 由脚本回填。字面相似不等于教学上重复，删改前自己判断。
+8. **控制课件体积**：默认 `--dictionary-scope lesson` 只为本篇出现的词内置离线释义（示例由 4.4MB 降到约 375KB）；课件要带到没有网络的教室、又希望任意生词都能离线查时，才用 `--dictionary-scope full`。录音很大时用 `--audio-mode folder` 并把音频文件夹一起交付。
+
+`cost.py` 只估算编写负担，不是 token 计费，也不承诺模型速度；引文回填省抄写，不省教学判断。
 
 已经有全卷数据时可直接筛选再构建：
 
 ```text
-python scripts/scope.py WORK/exam.json --sections reading,cloze --out WORK/selected.json
-python scripts/build.py WORK/selected.json OUTPUT --source-ledger WORK/source-ledger.json
-python scripts/build.py WORK/exam.json OUTPUT --sections L6,L7 --mode intensive --source-ledger WORK/source-ledger.json
+python3 scripts/scope.py WORK/exam.json --sections reading,cloze --out WORK/selected.json
+python3 scripts/build.py WORK/selected.json OUTPUT --source-ledger WORK/source-ledger.json
+python3 scripts/build.py WORK/exam.json OUTPUT --sections L6,L7 --mode intensive --source-ledger WORK/source-ledger.json
 ```
 
 Windows 使用实际可执行的 `py -3` 或 `python`；macOS/Linux 可用 `python3`。未选章节不用先生成内容再删掉；上述筛选是已有数据的复用路径。台账保留原卷来源，质量门槛仅核对本次明确选择的章节，未知章节 ID 会报错。

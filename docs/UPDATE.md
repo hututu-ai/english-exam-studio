@@ -5,8 +5,16 @@
 ## Agent 的实际执行
 
 1. 确认宿主实际加载的 Skill 位置、操作系统、是否具有下载和写文件权限。云端容器不是老师的 Windows/macOS 本机，不能把 `/root/.codebuddy/...` 写成老师电脑上的安装位置。
-2. 已安装时先备份完整目录和自定义要求。通过官方 Release 下载完整 `english-exam-studio.zip`，核对同版 `SHA256SUMS.txt`，安全解压到临时目录；拒绝绝对/越界路径及符号链接，忽略隐藏文件和 __MACOSX。不要先删除旧版。
-3. 从临时目录运行 `python scripts/check_install.py`，确认 status=complete，再更新宿主实际的 Skill 目录。不要把下载内容直接交给 shell 执行。Windows 用已可用的 `py -3` 或 `python`，macOS/Linux 用可用的 `python3`。
+2. 已安装时先备份完整目录和自定义要求。通过官方 Release 下载完整 `english-exam-studio.zip` 与同版 `SHA256SUMS.txt`（**发布包里两者一起产出**：`scripts/package_skill.py` 打完 ZIP 会在**同一目录**写一份 `sha256sum` 格式的 `SHA256SUMS.txt`，多版本可并存），**用脚本完成核对、安全解压与比较，不要手工 unzip**：
+
+   ```text
+   py -3 scripts/extract_package.py 下载的.zip --sha256sums SHA256SUMS.txt --out 临时目录 --compare-to "现有技能目录"
+   ```
+
+   它会核对压缩包指纹、拒绝绝对/越界路径、符号链接、隐藏文件与 __MACOSX（并逐条列出被拒绝的条目，不是静默跳过），在解压结果上运行 `check_install.py`，再按官方清单列出**新增/变更/删除**以及与官方哈希不一致的 `locally_modified`（你自己的改动）。不要先删除旧版。若官方 Release 里确实没有 `SHA256SUMS.txt`，**如实说"本次无法核对压缩包指纹"**，不要跳过后声称已核对，也不要自己编一份。
+3. 确认上面报告 `status=ok` 后再更新宿主实际的 Skill 目录：加 `--apply --backup 备份目录`（**没有 `--backup` 会拒绝执行**；备份目录已存在也会拒绝，避免覆盖上一次备份）。它会先完整备份，再覆盖官方文件；不在新版清单里的你自己的笔记不会被删除。不要把下载内容直接交给 shell 执行。Windows 用已可用的 `py -3` 或 `python`，macOS/Linux 用可用的 `python3`。
+   - **动手前先预检**：只要有任何一个目标文件当前写不进去（被 OneDrive／网盘同步、杀毒或 Office/WPS 占用，或设成只读），它会**直接拒绝并说明是哪个文件**，此时**一个文件都没有改动**，不会留下"改了一半"的技能目录。
+   - **复制中途失败会自动回滚**：万一预检之后仍被拦住（典型是同步软件刚打开文件），它会用刚做的备份把已覆盖的文件逐个恢复，并报出失败的文件名与备份位置；若连回滚也被占用挡住，它会**如实列出哪些文件没恢复**，让你从备份手动复制回去，不会声称"已恢复"。
 4. 更新后再次运行完整性检查、`doctor.py` 环境检查，再用小样实际检查模板、按钮、音频。报告分别写“完整安装 / 环境能力 / 浏览器验收”，不能只凭 VERSION 相同或 doctor 检查了 Python 就声称全部成功。保留个性化笔记；改动官方核心文件时明确报告与官方哈希的差异，不能篡改官方清单掩盖变化。
 5. 安装成功后按 references/teacher-options.md 询问课型和功能。若宿主安装界面无法对话，在首次调用时问。
 
@@ -24,6 +32,25 @@
 
 课堂记录通常保存在原浏览器中。换电脑、清理浏览器或更换访问地址前主动导出，在新课件中导入核对。Skill 备份与课堂记录备份是两回事。
 
+## 发布前必跑（维护者）
+
+改完 Skill、打完包之后，在**解压出来的发布包**里跑这两条，两条都通过再发布：
+
+```text
+py -3 scripts\release_check.py           # 一条命令：文档一致 + 安装完整 + 整链重放 + 材料包判读 + 闸门用例
+```
+
+它把下面两件事串起来跑（也可以用 `--no-browser` 跳过浏览器交互），报告写到 `dist/release-check/`：
+
+```text
+py -3 scripts\rehearse_first_use.py      # 老师第一次使用的整条路径（九步）能不能走通
+py -3 scripts\smoke_report.py --zip      # 这台机器能做到哪一步；产出可发回判读的 zip
+```
+
+- `rehearse_first_use.py`：安装完整性 → 选范围与功能 → 图片版试卷登记 → 图片版答案绑定 → 构建 → 核验 → 浏览器（有工具时）→ 人工复核清单 → 打包。每步只记真实状态，**缺工具标 skipped、不算通过**；无浏览器时打包自动降级为待验收版。报告在 `first-use-report/first-use-report.md`。
+- `smoke_report.py --zip`：体检本机并产出 `smoke-report-<平台>.zip`；接收方用 `python3 scripts/read_acceptance.py 收到的.zip` 判读"能证明什么、还不能证明什么"。
+- 发布包要在 **Windows、macOS、Linux 各跑一次**最好；至少要在目标老师的平台上跑过 `rehearse_first_use.py`。只在工作树里跑测试**不算**发布验收。
+
 ## 版本检查
 
-`python scripts/check_update.py --json` 会先检查安装完整性，再联网比对版本；`--offline` 只检查本地。报告 incomplete_install 时先补齐官方包，版本号不是安装成功的凭证。
+`python3 scripts/check_update.py --json` 会先检查安装完整性，再联网比对版本；`--offline` 只检查本地。报告 incomplete_install 时先补齐官方包，版本号不是安装成功的凭证。版本按语义比较（`1.0.2 < 1.0.10`，`1.0.15-dev < 1.0.15`）：本机比公开最新版更新时报告 `newer_than_release`，提示**无需降级**，不引导用较旧的文件覆盖较新的安装。

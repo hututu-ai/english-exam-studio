@@ -3,6 +3,8 @@
 import argparse,hashlib,json,re,difflib,subprocess
 from pathlib import Path
 from audio_wiring import bundle_dir, wire_audio
+from answers import answer_match
+import section_kinds
 from platform_tools import force_utf8, ffprobe_bin
 
 def digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
@@ -13,7 +15,7 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
     def add(code,location,message):issues.append({'code':code,'location':location,'message':message})
     def warn(code,location,message):warnings.append({'code':code,'location':location,'message':message})
     audio_report=None
-    if any(s.get('kind')=='listening' and not s.get('audio') for s in d.get('sections',[])):
+    if any(section_kinds.is_listening(s) and not s.get('audio') for s in d.get('sections',[])):
         directory=bundle_dir(base,audio_bundle)
         if directory:audio_report=wire_audio(d,base,directory)
     secs=d.get('sections',[]);numeric=[int(q['id']) for s in secs for q in s.get('questions',[]) if str(q.get('id','')).isdigit()]
@@ -27,8 +29,24 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
         if any(q.get('answer_status')=='official' for s in secs for q in s.get('questions',[])) and not any(x.get('role')=='answers' for x in sources):add('official_answer_file','sources','官方答案必须关联role=answers的原始答案文件')
         if not sources:add('source_files_missing','sources','台账必须保留原始材料路径、用途和SHA256')
         for source in sources:
-            path=ledger_path.parent/source.get('path','')
-            if not path.is_file() or digest(path)!=source.get('sha256'):add('source_hash',source.get('path',''),'原始材料缺失或指纹不符')
+            pages=source.get('pages') or []
+            if pages:
+                # 图片版材料：逐页核对，并重算集合指纹，防止换页、重拍或漏页后仍按旧台账交付。
+                if source.get('kind')!='image_pages':add('source_pages_kind',source.get('path',''),'声明 pages 的原始材料应带 kind=image_pages（由 scripts/image_pages.py 生成）')
+                for page in pages:
+                    page_path=ledger_path.parent/page.get('path','')
+                    if not page_path.is_file() or digest(page_path)!=page.get('sha256'):
+                        add('source_page_hash',f"{source.get('path','')}#{page.get('index')}",'原卷图片缺失、被替换或重拍，指纹不符')
+                try:
+                    from image_pages import page_set_digest
+                    if page_set_digest(pages)!=source.get('sha256'):add('source_pages_digest',source.get('path',''),'图片集合指纹与登记不一致：页顺序或内容被改动过')
+                except ImportError:pass
+                if source.get('layout')=='spread':
+                    warn('source_spread_pages',source.get('path',''),
+                         f"原卷是跨页照片：{source.get('page_count')} 张图共 {source.get('logical_pages')} 页（一张图并排两页），逐页核对题号与漏页时必须左右页分别看")
+            else:
+                path=ledger_path.parent/source.get('path','')
+                if not path.is_file() or digest(path)!=source.get('sha256'):add('source_hash',source.get('path',''),'原始材料缺失或指纹不符')
         expected=ledger.get('sections',[])
         scope=d.get('generation_scope',{})
         if scope.get('partial'):
@@ -57,7 +75,8 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
                 if q.get('answer_status')=='official' and ('answer' not in sq or sq.get('answer_status')!='official' or not sq.get('answer_reference')):add('answer_provenance',qid,'官方答案缺少独立原件页码/位置依据')
     for s in secs:
         sid=s['id'];kind=s['kind'];pars=s.get('paragraphs',[]);qs=s.get('questions',[])
-        if kind in ['reading','seven','cloze','grammar']:
+        preset=section_kinds.preset(s);form=section_kinds.shape(s)
+        if form['passage'] and not form['writing']:
             if any('\n' in p.get('text','').strip() for p in pars):add('collapsed_paragraphs',sid,'一条paragraph含多个换行段落，无法逐段翻译或准确定位，请保留原卷真实段落')
             if len(pars)>=3 and s.get('structure') and len(s.get('structure',[]))<2:add('structure_too_generic',sid,'多段文章只有一张覆盖全文的结构卡，请分析真实段落功能和推进关系')
         for row in s.get('structure',[]):
@@ -65,10 +84,10 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
         for p in pars:
             text=p.get('text','')
             for q in qs:
-                if kind=='grammar' and isinstance(q.get('answer'),str):
+                if preset=='grammar' and isinstance(q.get('answer'),str):
                     if re.search(r'\{\{'+re.escape(str(q['id']))+r'\}\}\s*'+re.escape(q['answer'])+r'\b',text,re.I):add('answer_leaked_in_source',str(q['id']),'原文空格后重复出现答案，回填会重复，请核对原卷')
-            if kind=='writing' and (p.get('role')=='model' or len(norm(text))>60 and norm(text) in norm(s.get('teacher_model',''))):add('model_in_source',sid,'教学范文混入原卷区域，必须放teacher_model并按需展开')
-        if kind=='listening':
+            if form['writing'] and (p.get('role')=='model' or len(norm(text))>60 and norm(text) in norm(s.get('teacher_model',''))):add('model_in_source',sid,'教学范文混入原卷区域，必须放teacher_model并按需展开')
+        if section_kinds.is_listening(s):
             if len(pars)==1 and (pars[0].get('speaker')=='M/W' or re.search(r'\bM\s*:',pars[0].get('text','')) and re.search(r'\bW\s*:',pars[0].get('text',''))):add('dialogue_collapsed',sid,'多说话者对话合成一个段落，请按话轮保存说话者、原文与翻译')
             audio=base/s.get('audio','');same=[];whole_ranges=[]
             for q in qs:
@@ -85,6 +104,11 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
             elif alignment.get('mode')=='unsegmented':
                 warn('audio_unsegmented',sid,'听力未分段：HTML 使用整卷原音并标注「整卷原音（未分段）」，逐题复听与精听挖空需人工拖动；交付说明必须写明')
             else:
+                # boundary 必须写明：页面只在 auto_silence/未分段时标「边界待核对」，缺省不写等于让页面显示成已核对（schema 要求这个字段）。
+                boundary=alignment.get('boundary')
+                if boundary not in ('verified','auto_silence'):
+                    add('audio_alignment_boundary_missing',sid,'对齐缺少 boundary 或取值不认识：请写明切点是人已逐段试听核对（verified）还是静音自动分段（auto_silence）；不写会让页面看起来像已核对')
+                    boundary='auto_silence'
                 path=base/alignment.get('transcript_file','');start=alignment.get('full_start');end=alignment.get('full_end');whole=' '.join(p.get('text','') for p in pars)
                 if not isinstance(start,(int,float)) or not isinstance(end,(int,float)) or not 0<=start<end:add('audio_source_window',sid,'原音切点无效');continue
                 try:
@@ -93,12 +117,11 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
                 except (OSError,ValueError,subprocess.CalledProcessError,subprocess.TimeoutExpired):add('audio_probe',sid,'无法测量实际音频时长');continue
                 if abs(duration-(end-start))>.3:add('audio_source_duration',sid,'整段实际时长与原音切点不符')
                 if not path.is_file():
-                    if alignment.get('boundary')=='auto_silence':warn('audio_alignment_auto_silence',sid,'无时间转写，已核对文件时长，语义边界仍需逐段试听');continue
+                    if boundary=='auto_silence':warn('audio_alignment_auto_silence',sid,'无时间转写，已核对文件时长，语义边界仍需逐段试听');continue
                     add('audio_transcript_hash',sid,'转写证据缺失');continue
                 if digest(path)!=alignment.get('transcript_sha256'):add('audio_transcript_hash',sid,'转写证据指纹不符');continue
                 tr=json.loads(path.read_text(encoding='utf-8'));full=base/d.get('full_audio','')
                 if not full.is_file() or tr.get('source_audio_sha256')!=digest(full):add('transcript_source_audio',sid,'转写未关联到本卷完整原音指纹')
-                boundary=alignment.get('boundary','verified')
                 if boundary=='auto_silence':warn('audio_alignment_auto_silence',sid,'切点由静音自动分段产生：qa-report.md 必须逐段记录实际试听的首尾核对结果')
                 selected=[r for r in tr.get('segments',[]) if r.get('end',0)>start and r.get('start',0)<end]
                 for key,rows in [('opening_quote',selected[:2]),('closing_quote',selected[-2:])]:
@@ -109,7 +132,7 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
                     if len(a)<3 or norm(quote) not in norm(whole) or score<.65:
                         message='首尾原句未与实际切点转写匹配：'+key
                         (warn if boundary=='auto_silence' else add)('audio_boundary_text',sid,message)
-        if kind=='writing':
+        if form['writing']:
             for k in ['outline','language','model_analysis']:
                 if not isinstance(s.get('writing_steps',{}).get(k),list):add('writing_field_type',sid,'writing_steps.'+k+' 必须为数组')
     if answer_key:
@@ -125,8 +148,18 @@ def audit_exam(d,base,ledger_path=None,answer_key=None,audio_bundle=None):
                     given=q.get('answer');given=given if isinstance(given,list) else [given]
                     given=[str(x).strip().upper() for x in given if x not in (None,'')]
                     if expected is None:add('answer_key_entry_missing',qid,f'答案原件解析表里没有第 {qid} 题，无法证明这是官方答案')
-                    elif str(expected).strip().upper() not in given:add('answer_key_mismatch',qid,f'答案原件解析为 {expected}，成品写 {given}')
-            if official and not table.get('answer_source_sha256'):add('answer_key_provenance','sources','答案表缺少原件指纹，重新运行 scripts/answers.py extract')
+                    elif not answer_match(expected,given):add('answer_key_mismatch',qid,f'答案原件解析为 {expected}，成品写 {given}')
+            if official:
+                fingerprint=str(table.get('answer_source_sha256') or '').strip().lower()
+                if not fingerprint:add('answer_key_provenance','sources','答案表缺少原件指纹，重新运行 scripts/answers.py extract')
+                else:
+                    # 解析表必须来自台账登记的那份答案原件；否则"答案原件 → answers.json"这一环没有被证明。
+                    declared={str(x.get('sha256') or '').strip().lower() for x in (ledger or {}).get('sources',[]) if x.get('role')=='answers' and x.get('sha256')}
+                    if not declared:add('answer_file_fingerprint_missing','sources','official 答案要求台账里 role=answers 的原始答案文件登记 SHA256')
+                    elif fingerprint not in declared:add('answer_key_not_registered','sources','答案表指纹与台账登记的答案原件不一致：answers.json 必须由台账那份答案文件解析而来')
+                if table.get('answer_source_kind')=='image_transcription':
+                    # 图片版答案只能靠人读图转录，机器无法逐字形核对；如实标出来，不冒充脚本解析。
+                    warn('answer_key_image_transcription','sources','答案表来自图片转录（answer_source_kind=image_transcription）：必须逐题与答案原图比对，构建通过不代表答案已被机器核对')
     if audio_report:
         warnings+= [{'code':'audio_wiring_pending','location':item.split('：')[0],'message':item} for item in audio_report['pending']]
     return {'status':'blocked' if issues else 'automated_checks_passed','delivery_status':'not_ready' if issues else 'content_and_browser_review_required','errors':issues,'warnings':warnings,'audio_wiring':audio_report,'source_ledger_sha256':digest(ledger_path) if ledger_path.is_file() else None,'scope':'Checks source-ledger consistency and detectable defects. Does not certify that ledger transcription or teaching reasoning is correct. Never generate the ledger from completed lesson data to bypass checks.'}

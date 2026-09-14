@@ -25,18 +25,22 @@ class RangeHandler(SimpleHTTPRequestHandler):
         if header:
             match = re.fullmatch(r'bytes=(\d*)-(\d*)', header.strip())
             if not match or not any(match.groups()):
-                f.close(); self.send_error(400, 'Invalid range'); return None
-            a, b = match.groups()
-            if a:
-                start = int(a)
-                end = min(int(b), size - 1) if b else size - 1
+                # 认不出的 Range（多段 bytes=0-99,200-299、未知单位、乱写的值）按 RFC 7233
+                # "MAY ignore the Range header field" 处理：**忽略它，照常返回 200 整段**。
+                # 返回 400/416 会让这类播放器直接放不出声音，而整段返回最多是多传一点数据。
+                header = None
             else:
-                start = max(0, size - int(b))
-            if start > end or start >= size:
-                f.close(); self.send_response(416)
-                self.send_header('Content-Range', f'bytes */{size}')
-                self.send_header('Content-Length', '0'); self.end_headers(); return None
-            self.byte_range = (start, end)
+                a, b = match.groups()
+                if a:
+                    start = int(a)
+                    end = min(int(b), size - 1) if b else size - 1
+                else:
+                    start = max(0, size - int(b))
+                if start > end or start >= size:
+                    f.close(); self.send_response(416)
+                    self.send_header('Content-Range', f'bytes */{size}')
+                    self.send_header('Content-Length', '0'); self.end_headers(); return None
+                self.byte_range = (start, end)
         self.send_response(206 if header else 200)
         self.send_header('Content-Type', self.guess_type(path))
         self.send_header('Accept-Ranges', 'bytes')

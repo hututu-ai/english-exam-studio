@@ -1,1 +1,14 @@
-{"confirmed":true,"sections":"listening,reading","mode":"lesson","features":{"classroom_tools":false,"quick_answers":false,"deep_reading":false,"writing_transfer":false,"culture_background":false}}
+{
+  "confirmed": true,
+  "sections": "listening,reading",
+  "mode": "lesson",
+  "features": {
+    "classroom_tools": false,
+    "quick_answers": false,
+    "deep_reading": false,
+    "writing_transfer": false,
+    "culture_background": false,
+    "annotations": true,
+    "dictionary": true
+  }
+}

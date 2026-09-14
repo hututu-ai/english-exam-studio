@@ -3,7 +3,8 @@
 import argparse, hashlib, json, zipfile
 from pathlib import Path
 from verify_output import verify_output
-from platform_tools import force_utf8
+from qa_report import check as qa_check
+from platform_tools import explain_error,force_utf8
 
 def package(output, destination, allow_unchecked=False):
     out=Path(output).resolve();dest=Path(destination).resolve()
@@ -12,10 +13,21 @@ def package(output, destination, allow_unchecked=False):
     digest=hashlib.sha256((out/'index.html').read_bytes()).hexdigest()
     evidence=out/'browser-check.json'
     report=json.loads(evidence.read_text(encoding='utf-8')) if evidence.exists() else {}
-    passed=report.get('status')=='passed' and report.get('html_sha256')==digest and bool(report.get('checks')) and all(isinstance(c,dict) and c.get('status')=='passed' for c in report['checks']) and not report.get('errors') and bool(report.get('engine')) and report.get('media_sha256',{})==verified['resource_sha256']
-    if not passed and not allow_unchecked:raise ValueError('缺少与当前 HTML 对应的浏览器点击验收；先运行 browser_check.cjs 或宿主浏览器验收。无法验收时只可用 --allow-unchecked 交付待验收版')
+    browser_ok=report.get('status')=='passed' and report.get('html_sha256')==digest and bool(report.get('checks')) and all(isinstance(c,dict) and c.get('status')=='passed' for c in report['checks']) and not report.get('errors') and bool(report.get('engine')) and report.get('media_sha256',{})==verified['resource_sha256']
+    qa=qa_check(out)
+    passed=browser_ok and qa['status']=='ok'
+    if not passed and not allow_unchecked:
+        reasons=[]
+        if not browser_ok:reasons.append('缺少与当前 HTML 对应的浏览器点击验收；先运行 browser_check.cjs 或宿主浏览器验收')
+        if qa['status']!='ok':reasons.append('人工复核清单未完成——'+'；'.join(qa.get('problems',[])[:3])+'（用 scripts/qa_report.py init/check 处理）')
+        raise ValueError('；'.join(reasons)+'。无法完成时只可用 --allow-unchecked 交付待验收版')
     status='browser_checked' if passed else 'preview_only_browser_check_pending'
-    (out/'delivery-report.json').write_text(json.dumps({'status':status,'html_sha256':digest,'browser_report':'browser-check.json' if passed else None,'scope':'Checks apply only to this artifact; teaching accuracy and exact audio boundaries require source review.'},ensure_ascii=False,indent=2),encoding='utf-8')
+    skipped=report.get('skipped') or []
+    (out/'delivery-report.json').write_text(json.dumps({'status':status,'html_sha256':digest,'browser_report':'browser-check.json' if passed else None,
+        'browser_checks':{'passed':len(report.get('checks',[])),'skipped':len(skipped)},
+        'browser_checks_skipped':[{'name':item.get('name'),'reason':item.get('reason')} for item in skipped],
+        'qa_report':{'status':qa['status'],'items':qa.get('items',0),'concluded':qa.get('concluded',0),'problems':qa.get('problems',[])},
+        'scope':'Checks apply only to this artifact; 跳过项表示功能未开启或本课件没有可测数据，未经验证，不能当作已通过；teaching accuracy and exact audio boundaries require source review.'},ensure_ascii=False,indent=2),encoding='utf-8')
     dest.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(dest,'w',zipfile.ZIP_DEFLATED) as z:
         for p in sorted(out.rglob('*')):
@@ -27,4 +39,4 @@ def package(output, destination, allow_unchecked=False):
 if __name__=='__main__':
     force_utf8();p=argparse.ArgumentParser();p.add_argument('output');p.add_argument('zip');p.add_argument('--allow-unchecked',action='store_true');a=p.parse_args()
     try:print(json.dumps(package(a.output,a.zip,a.allow_unchecked),ensure_ascii=False))
-    except (ValueError,OSError) as e:p.exit(1,str(e)+'\n')
+    except (ValueError,OSError) as e:p.exit(1,'ERROR: '+explain_error(e)+'\n')

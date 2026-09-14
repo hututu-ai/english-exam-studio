@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Canonical optional features. Missing preferences preserve old lessons, explicit plans do not."""
 import copy
-DEFAULTS={'classroom_tools':True,'quick_answers':True,'writing_transfer':True,
+DEFAULTS={'annotations':True,'dictionary':True,'classroom_tools':True,'quick_answers':True,'writing_transfer':True,
           'deep_reading':True,'culture_background':False}
 
 def features(exam):
@@ -17,7 +17,8 @@ def apply_plan(exam,plan):
     if plan.get('mode') not in ('lesson','intensive'):raise ValueError('请选择 lesson 或 intensive')
     if not isinstance(plan.get('sections'),str) or not plan['sections'].strip():raise ValueError('请选择板块')
     if set(plan.get('features',{}))!=set(DEFAULTS):raise ValueError('请记录全部可选功能的选择')
+    if plan.get('profile') not in (None,'quick','full'):raise ValueError('profile 只能是 quick 或 full')
     from scope import select
     result=select(exam,plan['sections'],plan['mode']);result['features']=features(plan)
-    result['generation_preferences']={'confirmed':True,'sections':plan['sections'],'mode':plan['mode'],'features':result['features']}
+    result['generation_preferences']={'confirmed':True,'sections':plan['sections'],'mode':plan['mode'],'profile':plan.get('profile') or 'full','features':result['features']}
     return result

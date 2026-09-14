@@ -36,6 +36,8 @@ https://github.com/hututu-ai/english-exam-studio
 
 **本项目尚未完成 WorkBuddy 上的整套实机验收。** 官方支持本地包导入，和本包已经在该平台完成材料识别、音频处理、课件生成，是两个不同层次。首次使用请让助手执行上面的检查，并以实际版本的导入结果为准。
 
+**网络受限时（实测过的一种）：** 宿主沙箱可能拦住 `git clone github.com`（TLS 握手失败），而网页抓取可用。四条路的顺序是：**① 最稳——让老师把发布 ZIP 作为附件上传**，再按平台的「添加技能 → 上传技能」导入（ZIP 约 2MB，微信/邮件都能转发；下载可以在别的网络完成，安装只需要这台机器拿到文件）；② 抓 `raw.githubusercontent.com` 上的文件——用一条命令，不要手工逐个抓：`py -3 scripts\fetch_package.py --base https://raw.githubusercontent.com/hututu-ai/english-exam-studio/main --out 临时目录`（它按 `install-manifest.json` 下载每个文件并逐个核对 SHA256，缺文件、哈希不符、越界路径都会如实列出）；③ 第 ② 条打不开时改走 jsDelivr CDN：`py -3 scripts\fetch_package.py --base https://cdn.jsdelivr.net/gh/hututu-ai/english-exam-studio@main --out 临时目录`（第三方 CDN，通常更好打开——哈希一致只证明传输没损坏，来源可信仍需官方 `SHA256SUMS.txt` 核对官方 ZIP）；④ 最后才是 `git clone`，**不要反复重试**。抓完必须跑 `py -3 scripts\check_install.py` 到 `complete`。先跑 `py -3 scripts\host_probe.py --network` 可以把这四条路径的可用性打印出来。
+
 下载时优先使用项目发布页提供的 Skill 包。GitHub 的“Code → Download ZIP”下载的是整个源码仓库；若平台无法识别其外层目录，让助手确认 `SKILL.md` 所在文件夹并按平台规则整理，保持模板和脚本完整，不只复制一个 Markdown 文件。
 
 ## 2. 哪些东西真的需要安装？
@@ -102,6 +104,8 @@ whisper-cli -h（仅本地转写路线需要）
 
 将同一次考试的材料一起提供给助手：试卷、参考答案、听力音频，以及已有的听力原文。扫描件不要漏页，照片保留完整题干与选项。不同版本试卷请明确标注，避免把 A 卷和 B 卷答案混用。
 
+**只有图片也可以，不必先转成 PDF。** 手机拍的试卷、截图版的答案或听力原文都能直接用；助手会先用 `scripts/image_pages.py` 把图片登记成可校验的页集合（顺序、漏页、重号、尺寸），再逐页转录。图片版答案属于人工转录，构建会明确标出“须逐题与答案原图比对”，不会被说成机器核对的官方答案。详见 [图片版材料处理](../references/image-inputs.md)。
+
 然后告诉助手：
 
 ```text
@@ -115,6 +119,8 @@ whisper-cli -h（仅本地转写路线需要）
 ```bash
 python3 scripts/preview.py "你的课件文件夹" --port 8918
 ```
+
+装好后想确认这台机器真的能用，跑一次 `py -3 scripts\smoke_report.py --zip`，并把生成的 `smoke-report-windows.zip` 发回；接收方用 `py -3 scripts\read_acceptance.py 收到的.zip` 判读，报告会明确写出"能证明什么、还不能证明什么"。
 
 打开服务实际返回的本机地址。服务提供音频分段读取支持，方便验证定位复听；它不是上传公网，不会让其他老师通过你的 `127.0.0.1` 地址访问课件。端口占用时换一个端口，Windows 可按实际 Python 入口调整命令。
 

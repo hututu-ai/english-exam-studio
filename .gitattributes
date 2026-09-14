@@ -1,3 +1,4 @@
+# 仓库里所有文本文件按 LF 存；Windows 的 .bat 必须保留 CRLF（双击运行靠它）
 *.py text eol=lf
 *.json text eol=lf
 *.html text eol=lf
@@ -9,3 +10,6 @@
 *.txt text eol=lf
 VERSION text eol=lf
 LICENSE text eol=lf
+
+# 双击运行的一键体检脚本：必须 CRLF，且不要在检出时被转换
+*.bat text eol=crlf

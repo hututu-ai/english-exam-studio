@@ -11,7 +11,8 @@ Fast paths that matter on a teacher laptop:
 import wave
 import argparse,concurrent.futures,difflib,hashlib,json,os,re,shutil,subprocess,sys,tempfile
 from pathlib import Path
-from platform_tools import IS_WINDOWS,ffmpeg_bin,ffprobe_bin,force_utf8,install_hints,whisper_bin
+from exam_document import read_json
+from platform_tools import IS_WINDOWS,explain_error,ffmpeg_bin,ffprobe_bin,force_utf8,install_hints,whisper_bin
 
 AUDIO_COPY_SUFFIXES={'.mp3','.m4a','.aac','.ogg','.oga','.opus'}
 MAX_WORKERS=min(4,max(1,(os.cpu_count() or 2)//2))
@@ -34,7 +35,7 @@ def run(args,timeout=600,include_stderr=False):
         name=str(args[0])
         hint=install_hints().get('ffmpeg') if name.startswith(('ffmpeg','ffprobe')) else install_hints().get('whisper')
         raise ValueError(f'找不到命令 {name}。{hint or ""}') from error
-    if r.returncode:raise ValueError(' '.join(map(str,args[:2]))+': '+r.stderr[-2500:])
+    if r.returncode:raise ValueError(f'外部命令执行失败（{args[0]}，退出码 {r.returncode}）：{r.stderr[-2500:]}')
     return r.stdout+r.stderr if include_stderr else r.stdout
 
 def probe(path):
@@ -61,10 +62,10 @@ def transcript(data):
     if 'segments' in data:rows=data['segments']
     elif 'transcription' in data:
         rows=[{'start':x['offsets']['from']/1000,'end':x['offsets']['to']/1000,'text':x['text']} for x in data['transcription']]
-    else:raise ValueError('Transcript needs segments or whisper.cpp transcription')
+    else:raise ValueError('转写文件既没有 segments 也没有 whisper.cpp 的 transcription 字段；请用 scripts/import_timed_text.py 生成，或先跑 analyze 得到 transcript.json')
     prev=-1
     for s in rows:
-        assert isinstance(s['text'],str) and 0<=s['start']<s['end'] and s['start']>=prev,'Invalid transcript time'
+        assert isinstance(s['text'],str) and 0<=s['start']<s['end'] and s['start']>=prev,f"转写时间轴无效：需要 text 为字符串、0<=start<end，且按时间递增；出错的一段是 {s!r}（上一段 start={prev}）"
         prev=s['start']
     return rows
 
@@ -157,7 +158,7 @@ def analyze(a):
         rows=[]
         progress(f'--no-asr：给出 {len(blocks)} 个可能的文本块（按静音切分），边界必须人工确认')
     elif rows is None:
-        if not model or not Path(model).is_file():raise ValueError('Supply --model LOCAL_MODEL or --transcript TIMED_JSON, or fall back to --no-asr')
+        if not model or not Path(model).is_file():raise ValueError('没有可用的转写模型：请给 --model 本机 whisper.cpp 模型路径，或给 --transcript 已有的带时间转写 JSON；两者都没有时用 --no-asr 只做静音候选（边界需人工确认）')
         if a.no_gpu:DEVICE['mode']='cpu'
         jobs=max(1,min(a.jobs,os.cpu_count() or 1));threads=max(1,min(a.threads,(os.cpu_count() or 1)//jobs))
         points=split_points(sil,d,jobs)
@@ -180,7 +181,7 @@ def analyze(a):
                 raise ValueError(f'ASR 超时（{a.timeout}s）：改 --no-asr 或加大 --timeout，不要无限等待') from e
         rows=[r for r in sorted(merged,key=lambda r:r['start']) if r['text']]
         for piece in list(out.glob('asr-part*.wav'))+list(out.glob('whisper-part*.json')):piece.unlink(missing_ok=True)
-    assert all(x['end']<=d+0.5 for x in (rows or [{'end':0}])),'Transcript exceeds source duration'
+    assert all(x['end']<=d+0.5 for x in (rows or [{'end':0}])),f"转写时间轴超出音频长度：最长到 {max((x['end'] for x in rows),default=0):.2f} 秒，实际音频 {d:.2f} 秒；请核对是否用错了音频或转写文件"
     dump(out/'transcript.json',{'source':str(source),'source_audio_sha256':source_hash,'duration':d,'segments':rows})
     progress(f'转写 {len(rows)} 段 → transcript.json（已绑定原音指纹，可 --reuse 复用）')
     names={x:i+1 for i,x in enumerate('one two three four five six seven eight nine ten eleven twelve'.split())}
@@ -197,22 +198,25 @@ def analyze(a):
     print(json.dumps({**{k:report[k] for k in ['duration','mode','transcript_segments','silences','chunk_parallelism']},**{'markers':len(candidates),'out':str(out)}},ensure_ascii=False))
 
 def cut(a):
-    manifest=json.loads(Path(a.manifest).read_text(encoding='utf-8'));rows=manifest['segments']
+    manifest=read_json(a.manifest)
+    if not isinstance(manifest,dict) or not isinstance(manifest.get('segments'),list):
+        raise ValueError(f"{a.manifest} 不像切片清单：需要 {{\"expected_count\":段数,\"segments\":[{{\"id\":\"L1\",\"start\":秒,\"end\":秒,\"verified\":true,\"evidence\":\"…\"}}]}}；格式见 references/listening.md")
+    rows=manifest['segments']
     source=Path(a.input).resolve();d=probe(source);source_hash=sha256(source)
-    assert rows and len(rows)==manifest['expected_count'],'Segment count mismatch'
-    kind=manifest.get('kind','text');assert kind in {'text','question'},'Unknown segment kind'
+    assert rows and len(rows)==manifest['expected_count'],f"切片清单与实际不符：manifest 声明 {manifest.get('expected_count')} 段，实际写了 {len(rows)} 段；请补齐或缺一不可，不要留下占位段"
+    kind=manifest.get('kind','text');assert kind in {'text','question'},f"manifest 的 kind 只能是 text（按原文段落切）或 question（按题切），当前 {kind!r}"
     seen=set();questions=set();end=0
     for s in rows:
-        assert re.fullmatch(r'[A-Za-z0-9_-]+',s['id']),'Unsafe segment ID'
-        assert s['id'] not in seen,'Duplicate segment ID';seen.add(s['id'])
-        assert s.get('evidence','').strip(),'Needs a reason in evidence'
-        assert s.get('verified') is True or a.allow_unverified,'Needs semantic verification evidence, or pass --allow-unverified for a silence-based pass'
-        assert 0<=s['start']<s['end']<=d+0.025,'Out-of-range segment'
-        if kind=='text':assert s['start']>=end,'Overlapping Text segments'
-        else:assert len(s.get('question_ids',[]))==1,'Question clip must map to exactly one question'
-        assert s.get('question_ids'),'Missing mapped questions'
+        assert re.fullmatch(r'[A-Za-z0-9_-]+',s['id']),f"片段 ID 只能用字母、数字、下划线或连字符（会变成音频文件名）：{s['id']!r}"
+        assert s['id'] not in seen,f"片段 ID 重复：{s['id']}；每段 ID 必须唯一";seen.add(s['id'])
+        assert s.get('evidence','').strip(),f"片段 {s['id']} 缺少 evidence：写明这一段为什么从这里切到这里（题号、题干原句或转写原句），不能只写时间"
+        assert s.get('verified') is True or a.allow_unverified,f"片段 {s['id']} 还没有人工核对过切点（verified 不为 true）。逐段试听后把 verified 改成 true；只有确实无法逐段核对时，才用 --allow-unverified 走静音自动分段，并在 qa-report 里逐段记录"
+        assert 0<=s['start']<s['end']<=d+0.025,f"片段 {s['id']} 的时间超出音频：start={s['start']}、end={s['end']}，音频共 {d:.2f} 秒；请按实际音频改正"
+        if kind=='text':assert s['start']>=end,f"片段 {s['id']} 与上一段重叠（这一段从 {s['start']} 开始，上一段到 {end} 结束）；按原文切的片段必须首尾相接不重叠"
+        else:assert len(s.get('question_ids',[]))==1,f"按题切的片段 {s['id']} 必须且只能对应 1 道题，当前 {s.get('question_ids')!r}"
+        assert s.get('question_ids'),f"片段 {s['id']} 没有写 question_ids：每个片段都要说清对应哪道题（或哪几段原文），否则课堂上无法定位"
         for q in s['question_ids']:
-            assert str(q) not in questions,'Question mapped more than once';questions.add(str(q))
+            assert str(q) not in questions,f"第 {q} 题被映射到多个片段；一题只能对应一个片段，否则课堂播放会重复或错位";questions.add(str(q))
         end=s['end']
     transcript_rows=[]
     if a.transcript:
@@ -288,4 +292,4 @@ if __name__=='__main__':
     args=p.parse_args()
     if hasattr(args,'timeout'):args.timeout=args.timeout or None
     try:args.func(args)
-    except (ValueError,AssertionError,KeyError,FileNotFoundError,subprocess.TimeoutExpired) as e:p.exit(1,f'ERROR: {e}\n')
+    except (ValueError,AssertionError,KeyError,FileNotFoundError,subprocess.TimeoutExpired) as e:p.exit(1,f'ERROR: {explain_error(e)}\n')

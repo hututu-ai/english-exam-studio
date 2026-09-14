@@ -103,14 +103,16 @@
           "paragraph_ids": [
             "A-p1"
           ],
-          "analysis": "先介绍地点与活动，再用修理椅子的例子说明怎样分享技能。"
+          "analysis": "先介绍地点与活动，再用修理椅子的例子说明怎样分享技能。",
+          "quote": "showed students how to repair a loose chair leg"
         },
         {
           "title": "安排与传承",
           "paragraph_ids": [
             "A-p2"
           ],
-          "analysis": "交代开放安排，以记录维修经验说明社团如何持续学习。"
+          "analysis": "交代开放安排，以记录维修经验说明社团如何持续学习。",
+          "quote": "The club keeps a small notebook of repairs so that new members can learn from earlier mistakes."
         }
       ],
       "logic_steps": [
