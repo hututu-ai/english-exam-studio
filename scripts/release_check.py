@@ -16,7 +16,9 @@ sys.path.insert(0,str(ROOT/'scripts'))
 from platform_tools import force_utf8
 
 GATE_MODULES=['tests.test_gates_fire','tests.test_delivery_gates_fire','tests.test_check_docs',
-              'tests.test_sentence_split_sync','tests.test_first_use_rehearsal']
+              'tests.test_sentence_split_sync','tests.test_first_use_rehearsal',
+              'tests.test_task_contract_new','tests.test_teaching_review_new',
+              'tests.test_listening_pipeline_new','tests.test_new_workflow_failures']
 
 def item(name,status,detail=''):
     return {'name':name,'status':status,'detail':detail}

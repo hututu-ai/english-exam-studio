@@ -93,7 +93,7 @@ class SentenceTranslations(unittest.TestCase):
                             'sha256':__import__('hashlib').sha256(source.read_bytes()).hexdigest()}],
                 'sections':exam['sections']}
         (self.base/'source-ledger.json').write_text(json.dumps(ledger,ensure_ascii=False),encoding='utf-8')
-        with contextlib.redirect_stdout(io.StringIO()):build.build(source,self.base/'out',self.base/'source-ledger.json',profile='quick')
+        with contextlib.redirect_stdout(io.StringIO()):build._render(source,self.base/'out',self.base/'source-ledger.json',profile='quick')
         report=json.loads((self.base/'out'/'build-report.json').read_text(encoding='utf-8'))
         self.assertTrue(any('未翻译' in item for item in report['pending_items']),report['pending_items'])
 

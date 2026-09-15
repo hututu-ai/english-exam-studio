@@ -116,6 +116,10 @@ def probe(root,network=False):
     if not capabilities['ffmpeg'] or not capabilities['ffprobe']:audio_tier='no_ffmpeg'
     elif capabilities['whisper']:audio_tier='full_auto'
     else:audio_tier='silence_only'
+    from speech_runtime import choose
+    speech=choose();report['speech_backend']=speech
+    report['legacy_audio_tier']=audio_tier
+    if audio_tier!='no_ffmpeg':audio_tier='whisperx_package_ready' if speech['status']=='package_ready' else 'whisperx_needs_setup'
     report['audio_tier']=audio_tier
     report['delivery_level']='browser_check_possible' if report['browser_check_possible'] else 'preview_only_browser_check_pending'
     guidance=[]
@@ -136,8 +140,8 @@ def probe(root,network=False):
         guidance.append('无法自动浏览器验收：只交付标注「待浏览器验收」的版本（package_lesson.py --allow-unchecked），不得手写 browser-check.json。')
     if audio_tier=='no_ffmpeg':
         guidance.append('无 ffmpeg/ffprobe：不切割或转码，可接入整卷原音并标注「未分段」；阅读等板块不受影响。')
-    elif audio_tier=='silence_only':
-        guidance.append('有 ffmpeg 但无转写程序：可静音分段并把边界标为待核对，或先按 whisper-setup.md 准备。')
+    elif audio_tier=='whisperx_needs_setup':
+        guidance.append('WhisperX 尚未准备：有同源时间字幕则复用；否则使用 speech_runtime.py prepare，经授权准备后短音频试跑。')
     guidance.append('功能多选：宿主无真正多选控件时用编号清单，请老师回复多个编号，禁止单选冒充。')
     report['guidance']=guidance
     report['scope']='本机能力探测；不代表真实试卷识别、听力边界或教学质量已验证。'

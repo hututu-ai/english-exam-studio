@@ -1,5 +1,8 @@
 # 听力处理
 
+1.0.119 默认处理入口为 [统一 WhisperX 链路](whisperx-workflow.md)。先记录老师本次范围与功能。下文 whisper.cpp 命令仅供已存在的备选环境使用，不因缺少它而安装另一套；不经老师同意降级。
+
+
 无 Whisper 先读 [替代路径](listening-alternatives.md)，支持同源 SRT/VTT/JSON 导入，不必重新转写。
 
 # 听力执行细节

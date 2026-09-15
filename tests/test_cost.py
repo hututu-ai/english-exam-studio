@@ -28,7 +28,7 @@ class CostTests(unittest.TestCase):
         output=io.StringIO()
         with tempfile.TemporaryDirectory() as temp:
             with contextlib.redirect_stdout(output):
-                build.build(ROOT/'examples/demo-reading.json',Path(temp)/'out',ROOT/'examples/source-ledger.json')
+                build._render(ROOT/'examples/demo-reading.json',Path(temp)/'out',ROOT/'examples/source-ledger.json')
             report=json.loads(output.getvalue())
         for key in ('prepare_audio','validate','quality_gate','answer_audit','render_and_write'):
             self.assertIn(key,report['timing'])
@@ -243,7 +243,7 @@ class DuplicateDetection(unittest.TestCase):
                                 'sha256':__import__('hashlib').sha256(source.read_bytes()).hexdigest()}],
                     'sections':exam['sections']}
             (base/'source-ledger.json').write_text(json.dumps(ledger,ensure_ascii=False),encoding='utf-8')
-            with contextlib.redirect_stdout(io.StringIO()):build.build(source,base/'out',base/'source-ledger.json')
+            with contextlib.redirect_stdout(io.StringIO()):build._render(source,base/'out',base/'source-ledger.json')
             report=json.loads((base/'out'/'build-report.json').read_text(encoding='utf-8'))
             self.assertIn('estimated_saving',report['authoring_cost'])
             self.assertEqual(report['status'],'structural_checks_passed','重复内容只提醒，绝不阻断构建')
@@ -297,7 +297,7 @@ class ReviewIndex(unittest.TestCase):
                                 'sha256':__import__('hashlib').sha256(source.read_bytes()).hexdigest()}],
                     'sections':self.exam['sections']}
             (base/'source-ledger.json').write_text(json.dumps(ledger,ensure_ascii=False),encoding='utf-8')
-            with contextlib.redirect_stdout(io.StringIO()):build.build(source,base/'out',base/'source-ledger.json')
+            with contextlib.redirect_stdout(io.StringIO()):build._render(source,base/'out',base/'source-ledger.json')
             report=json.loads((base/'out'/'build-report.json').read_text(encoding='utf-8'))
             self.assertIn('review_index',report['authoring_cost'])
             self.assertTrue(any('去重复核' in item for item in report['pending_items']),report['pending_items'])

@@ -66,7 +66,7 @@ class OptionImages(unittest.TestCase):
     def test_build_copies_option_images_and_fingerprints_them(self):
         source,ledger=self.lesson()
         out=self.base/'out'
-        with contextlib.redirect_stdout(io.StringIO()):build.build(source,out,ledger)
+        with contextlib.redirect_stdout(io.StringIO()):build._render(source,out,ledger)
         built=json.loads((out/'exam.json').read_text(encoding='utf-8'))
         question=built['sections'][0]['questions'][0]
         names=question['option_images']
@@ -85,7 +85,7 @@ class OptionImages(unittest.TestCase):
         if not node:self.skipTest('node 不可用')
         source,ledger=self.lesson()
         out=self.base/'out-shared'
-        with contextlib.redirect_stdout(io.StringIO()):build.build(source,out,ledger)
+        with contextlib.redirect_stdout(io.StringIO()):build._render(source,out,ledger)
         environment={key:value for key,value in os.environ.items() if key!='PLAYWRIGHT_MODULE'}
         subprocess.run([node,str(ROOT/'scripts/browser_check.cjs'),str(out)],capture_output=True,
                        text=True,encoding='utf-8',errors='replace',timeout=60,env=environment)
@@ -119,7 +119,7 @@ class OptionImages(unittest.TestCase):
         ledger['sections']=exam['sections']          # 台账与试卷必须同时更新，否则证据链对不上（构建会拦）
         write(ledger_path,ledger)
         out=self.base/'out-mixed'
-        with contextlib.redirect_stdout(io.StringIO()):build.build(source,out,ledger_path)
+        with contextlib.redirect_stdout(io.StringIO()):build._render(source,out,ledger_path)
         built=json.loads((out/'exam.json').read_text(encoding='utf-8'))
         question=built['sections'][0]['questions'][0]
         self.assertEqual(sorted(question['option_images']),['A','B'])
@@ -145,7 +145,7 @@ class OptionImagesInBrowser(unittest.TestCase):
         holder=OptionImages('test_build_copies_option_images_and_fingerprints_them');holder.setUp()
         try:
             source,ledger=holder.lesson();out=holder.base/'out-browser'
-            with contextlib.redirect_stdout(io.StringIO()):build.build(source,out,ledger)
+            with contextlib.redirect_stdout(io.StringIO()):build._render(source,out,ledger)
             environment={**os.environ,'CHROME_BIN':chrome,'BROWSER_ENGINE':'chromium'}
             result=subprocess.run([node,str(ROOT/'scripts/browser_check.cjs'),str(out)],capture_output=True,
                                   text=True,encoding='utf-8',errors='replace',timeout=300,env=environment)

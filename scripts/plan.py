@@ -68,11 +68,20 @@ def make(args):
         sections=args.sections.strip()
     features=parse_features(args.features,previous)
     plan={'confirmed':True,'sections':sections,'mode':mode,'features':features}
+    if getattr(args,'material',None):
+        from task_contract import material_records
+        import uuid
+        plan.update(materials=material_records(args.material),task_id=str(uuid.uuid4()),teacher_response=getattr(args,'response','') or '')
     if args.profile:plan['profile']=args.profile
     return plan,f'范围：{label}（sections={sections}, mode={mode}）· 开启的功能：'+('、'.join(short for (key,short,_) in FEATURES if features[key]) or '无（仅基础功能）')
 
+def check_data(plan):
+    return _check_data(plan)['problems']
+
 def check(path):
-    plan=json.loads(Path(path).read_text(encoding='utf-8'))
+    return _check_data(json.loads(Path(path).read_text(encoding='utf-8')))
+
+def _check_data(plan):
     keys={key for key,_,_ in FEATURES}
     given=set(plan.get('features',{}))
     problems=[]
@@ -101,6 +110,8 @@ def main():
     make_parser.add_argument('--previous',help='“沿用上次”时的上一份 generation-plan.json')
     make_parser.add_argument('--profile',choices=['quick','full'],help='不填则由构建按计划默认 full')
     make_parser.add_argument('--confirmed',action='store_true',help='确认已收到老师的范围与功能回答')
+    make_parser.add_argument('--material',action='append',help='本次原件，重复填写 paper=路径 / answers=路径 / audio=路径')
+    make_parser.add_argument('--response',help='老师实际的范围与功能回答，原样记录')
     make_parser.add_argument('--out',default='generation-plan.json')
     check_parser=sub.add_parser('check',help='检查已有计划是否可用')
     check_parser.add_argument('plan')

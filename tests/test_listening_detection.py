@@ -75,7 +75,7 @@ class PresenceInBrowser(unittest.TestCase):
         ledger.write_text(json.dumps({'sources':[{'role':'original_demo','path':'exam.json',
             'sha256':__import__('hashlib').sha256(source.read_bytes()).hexdigest()}],'sections':exam['sections']},ensure_ascii=False),encoding='utf-8')
         import contextlib,io
-        with contextlib.redirect_stdout(io.StringIO()):build.build(source,base/'out',ledger)
+        with contextlib.redirect_stdout(io.StringIO()):build._render(source,base/'out',ledger)
         environment={**os.environ,'CHROME_BIN':chrome,'BROWSER_ENGINE':'chromium'}
         result=subprocess.run([node,str(ROOT/'scripts/browser_check.cjs'),str(base/'out')],capture_output=True,
                               text=True,encoding='utf-8',errors='replace',timeout=300,env=environment)

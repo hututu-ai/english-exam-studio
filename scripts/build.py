@@ -315,11 +315,7 @@ def validate_features(d,profile='full',selection='all',mode='lesson',audio_mode=
         raise ValueError(format_problems(problems,'（以上是本次要求的全部缺项，已按节列全；--profile quick 可先出可上课版，未选的功能不必生成）'))
     return report
 
-def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile=None,selection='all',mode=None,audio_mode='embedded',plan=None,dictionary_scope='lesson'):
-    src=Path(src).resolve();out=Path(out).resolve();original=json.loads(src.read_text(encoding='utf-8'));plan_data=json.loads(Path(plan).read_text(encoding='utf-8')) if plan else None;d=apply_plan(original,plan_data) if plan_data else select(original,selection,mode)
-    # --profile wins; otherwise honour the teacher's plan; quick==先出可上课版（省 token 的默认手段）
-    profile=profile or (plan_data or {}).get('profile') or 'full'
-    if profile not in ('quick','full'):raise ValueError('profile 只能是 quick 或 full')
+def prune_features(d):
     d['features']=features(d)
     for section in d['sections']:
         if not d['features']['deep_reading']:
@@ -331,6 +327,45 @@ def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile=N
     if not d['features']['dictionary']:
         # 关闭查词时不把词库塞进课件：4MB 词库会让 HTML 变大、打开变慢，也违背"未选扩展不生成"。
         for key in ('dictionary','legacy_dictionary'):d.pop(key,None)
+    return d
+
+def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile=None,selection='all',mode=None,audio_mode='embedded',plan=None,dictionary_scope='lesson',review=None,rebuild_from=None,demo=False):
+    """Public entry: a new lesson needs current choices; rebuild explicitly reuses its old plan."""
+    from task_contract import validate as check_task,rebuild_plan
+    from teaching_review import validate as check_teaching
+    src=Path(src).resolve();ledger=source_ledger or src.parent/'source-ledger.json'
+    if demo:
+        root=Path(__file__).resolve().parents[1]
+        from check_install import check
+        if src not in [(root/'examples/demo-exam.json').resolve(),(root/'examples/demo-reading.json').resolve()] or Path(ledger).resolve()!=(root/'examples/source-ledger.json').resolve() or check(root)['status']!='complete':
+            raise ValueError('演示模式仅允许完整安装包自带的合成示例，不能用于教师试卷')
+        return _render(src,out,source_ledger=ledger,plan=plan,profile=profile,selection=selection,mode=mode,audio_mode=audio_mode,dictionary_scope=dictionary_scope)
+    if plan and rebuild_from:raise ValueError('新计划与 --rebuild-from 只能选一个；修改范围时请用新计划')
+    if not plan and not rebuild_from:raise ValueError('新建课件请先询问老师范围与功能，并用 --plan 提供本次确认；重建旧课件用 --rebuild-from 旧课件目录')
+    if rebuild_from:
+        plan_data=rebuild_plan(rebuild_from,src,ledger)
+        plan=Path(rebuild_from)/'generation-plan.json'
+    else:plan_data=json.loads(Path(plan).read_text(encoding='utf-8'))
+    contract=check_task(plan_data,ledger)
+    if selection!='all' or mode or profile and profile!=plan_data.get('profile','full'):raise ValueError('不要用额外参数覆盖教师已确认的范围、模式或档位，请更新计划')
+    document=prune_features(apply_plan(json.loads(src.read_text(encoding='utf-8')),plan_data))
+    if not review:raise ValueError('缺少独立内容复核记录：先用 teaching_review.py draft 生成清单，实际复核后用 --review 传入')
+    review_data=json.loads(Path(review).read_text(encoding='utf-8'));judgment=check_teaching(document,review_data,src.parent)
+    if judgment['errors']:raise ValueError('内容复核未完成：\n'+'\n'.join(judgment['errors']))
+    result=_render(src,out,source_ledger=ledger,audio_bundle=audio_bundle,answer_key=answer_key,plan=plan,audio_mode=audio_mode,dictionary_scope=dictionary_scope)
+    out=Path(out)
+    (out/'generation-plan.json').write_text(json.dumps(plan_data,ensure_ascii=False,indent=2),encoding='utf-8')
+    (out/'teaching-review.json').write_text(json.dumps(review_data,ensure_ascii=False,indent=2),encoding='utf-8')
+    report=json.loads((out/'build-report.json').read_text(encoding='utf-8'));report['task_contract']=contract;report['teaching_review']=judgment
+    (out/'build-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+    return result
+
+def _render(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile=None,selection='all',mode=None,audio_mode='embedded',plan=None,dictionary_scope='lesson'):
+    src=Path(src).resolve();out=Path(out).resolve();original=json.loads(src.read_text(encoding='utf-8'));plan_data=json.loads(Path(plan).read_text(encoding='utf-8')) if plan else None;d=apply_plan(original,plan_data) if plan_data else select(original,selection,mode)
+    # --profile wins; otherwise honour the teacher's plan; quick==先出可上课版（省 token 的默认手段）
+    profile=profile or (plan_data or {}).get('profile') or 'full'
+    if profile not in ('quick','full'):raise ValueError('profile 只能是 quick 或 full')
+    d=prune_features(d)
     started=time.perf_counter();timing={};_last=[started]
     def stage(name):
         now=time.perf_counter();timing[name]=round(now-_last[0],3);_last[0]=now
@@ -600,6 +635,9 @@ if __name__=='__main__':
     force_utf8()
     p=argparse.ArgumentParser();p.add_argument('input');p.add_argument('out')
     p.add_argument('--source-ledger');p.add_argument('--audio-bundle');p.add_argument('--answer-key')
+    p.add_argument('--demo',action='store_true',help='仅允许完整安装包中的合成示例，不适用于教师试卷')
+    p.add_argument('--review',help='针对本次教学内容的实际复核记录')
+    p.add_argument('--rebuild-from',help='明确沿用旧课件目录中的教师选择；仍需复核本次内容')
     p.add_argument('--plan',help='老师确认的 generation-plan.json')
     p.add_argument('--profile',choices=['full','quick'],default=None,help='quick=先出可上课版，精读项后补；不给则用计划里的 profile，计划也没有时用 full')
     p.add_argument('--sections',default='all',help='all 或逗号分隔的题型/章节ID，如 reading,A,L6')
@@ -607,5 +645,5 @@ if __name__=='__main__':
     p.add_argument('--audio-mode',choices=['embedded','folder'],default='embedded')
     p.add_argument('--dictionary-scope',choices=['lesson','full'],default='lesson',help='lesson=只内置本篇出现的词的离线释义（HTML 小得多）；full=内置整本离线词库')
     a=p.parse_args()
-    try:build(a.input,a.out,a.source_ledger,a.audio_bundle,a.answer_key,a.profile,a.sections,a.mode,a.audio_mode,a.plan,a.dictionary_scope)
+    try:build(a.input,a.out,a.source_ledger,a.audio_bundle,a.answer_key,a.profile,a.sections,a.mode,a.audio_mode,a.plan,a.dictionary_scope,review=a.review,rebuild_from=a.rebuild_from,demo=a.demo)
     except (AssertionError,ValueError,KeyError,FileNotFoundError,subprocess.CalledProcessError,subprocess.TimeoutExpired) as e:p.exit(1,f'ERROR: {explain_error(e)}\n')

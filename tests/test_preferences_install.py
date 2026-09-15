@@ -21,7 +21,7 @@ class AddedWorkflows(unittest.TestCase):
         with self.assertRaises(ValueError):preferences.apply_plan(d,{**plan,'features':{'quick_answers':False}})
         with tempfile.TemporaryDirectory() as t:
             p=Path(t)/'plan.json';p.write_text(json.dumps(plan))
-            with contextlib.redirect_stdout(io.StringIO()):build.build(ROOT/'examples/demo-reading.json',Path(t)/'output',ROOT/'examples/source-ledger.json',plan=p)
+            with contextlib.redirect_stdout(io.StringIO()):build._render(ROOT/'examples/demo-reading.json',Path(t)/'output',ROOT/'examples/source-ledger.json',plan=p)
             result=json.loads((Path(t)/'output/exam.json').read_text(encoding='utf-8'))
             self.assertNotIn('writing_bank',result['sections'][0]);self.assertNotIn('structure',result['sections'][0])
             self.assertTrue(result['sections'][0]['questions'][0]['strategy'])
@@ -65,8 +65,8 @@ class AddedWorkflows(unittest.TestCase):
                 features={k:False for k in preferences.DEFAULTS};features['dictionary']=on
                 path=root/f'{name}.json';path.write_text(json.dumps({'confirmed':True,'sections':'reading','mode':'lesson','features':features}),encoding='utf-8');plans[name]=path
             with contextlib.redirect_stdout(io.StringIO()):
-                build.build(ROOT/'examples/demo-reading.json',root/'off',ROOT/'examples/source-ledger.json',plan=plans['off'])
-                build.build(ROOT/'examples/demo-reading.json',root/'on',ROOT/'examples/source-ledger.json',plan=plans['on'])
+                build._render(ROOT/'examples/demo-reading.json',root/'off',ROOT/'examples/source-ledger.json',plan=plans['off'])
+                build._render(ROOT/'examples/demo-reading.json',root/'on',ROOT/'examples/source-ledger.json',plan=plans['on'])
             off=json.loads((root/'off/exam.json').read_text(encoding='utf-8'))
             on=json.loads((root/'on/exam.json').read_text(encoding='utf-8'))
             self.assertNotIn('dictionary',off)
@@ -79,8 +79,8 @@ class AddedWorkflows(unittest.TestCase):
             root=Path(t);plan=root/'plan.json'
             plan.write_text(json.dumps({'confirmed':True,'sections':'reading','mode':'lesson','features':dict(preferences.DEFAULTS)}),encoding='utf-8')
             with contextlib.redirect_stdout(io.StringIO()):
-                build.build(ROOT/'examples/demo-reading.json',root/'lesson',ROOT/'examples/source-ledger.json',plan=plan)
-                build.build(ROOT/'examples/demo-reading.json',root/'full',ROOT/'examples/source-ledger.json',plan=plan,dictionary_scope='full')
+                build._render(ROOT/'examples/demo-reading.json',root/'lesson',ROOT/'examples/source-ledger.json',plan=plan)
+                build._render(ROOT/'examples/demo-reading.json',root/'full',ROOT/'examples/source-ledger.json',plan=plan,dictionary_scope='full')
             lesson=json.loads((root/'lesson/exam.json').read_text(encoding='utf-8'))
             full=json.loads((root/'full/exam.json').read_text(encoding='utf-8'))
             self.assertIn('repair',lesson['dictionary'],'a word from the passage must stay offline-lookupable')

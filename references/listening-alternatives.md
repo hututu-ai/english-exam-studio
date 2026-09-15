@@ -1,5 +1,8 @@
 # 无 Whisper 时如何完成听力
 
+1.0.119 默认处理入口为 [统一 WhisperX 链路](whisperx-workflow.md)。先记录老师本次范围与功能。下文 whisper.cpp 命令仅供已存在的备选环境使用，不因缺少它而安装另一套；不经老师同意降级。
+
+
 Whisper 是可选转写后端，不是课件播放器的依赖。Windows 与 macOS 使用同一 Python 流程；不要求 Windows 老师运行 `.sh`、brew、sudo 或照抄容器 `/root/...` 路径。
 
 ## 缺工具先协助安装，不直接降级

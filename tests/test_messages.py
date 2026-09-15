@@ -181,7 +181,7 @@ class BuildMessages(unittest.TestCase):
         ledger_path=self.base/'source-ledger.json';ledger_path.write_text(json.dumps(ledger,ensure_ascii=False),encoding='utf-8')
         with self.assertRaises(ValueError) as caught:
             with contextlib.redirect_stdout(io.StringIO()):
-                build.build(source,self.base/'out',ledger_path)
+                build._render(source,self.base/'out',ledger_path)
         text=str(caught.exception)
         self.assertIn('共 4 处问题，一次改完再重跑',text)
         self.assertIn('条目写的是 9',text,'结构问题必须在清单里')
@@ -198,7 +198,7 @@ class BuildMessages(unittest.TestCase):
         ledger_path=self.base/'source-ledger.json';ledger_path.write_text(json.dumps(ledger,ensure_ascii=False),encoding='utf-8')
         with self.assertRaises(ValueError) as caught:
             with contextlib.redirect_stdout(io.StringIO()):
-                build.build(source,self.base/'out',ledger_path)
+                build._render(source,self.base/'out',ledger_path)
         text=str(caught.exception)
         self.assertIn('条目写的是 9',text,'结构问题要在清单里')
         self.assertIn('证据链不一致',text,'证据链问题也要在同一条清单里，而不是下一轮才冒出来')

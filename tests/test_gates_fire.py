@@ -290,7 +290,7 @@ class NeverFiredStructuralAsserts(unittest.TestCase):
             source=base/'exam.json';source.write_text(json.dumps(exam,ensure_ascii=False),encoding='utf-8')
             with contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises((ValueError,AssertionError)) as caught:
-                    build.build(source,base/'out',ROOT/'examples/source-ledger.json')
+                    build._render(source,base/'out',ROOT/'examples/source-ledger.json')
             self.assertIn('资源只能引用本地文件',str(caught.exception))
     def test_missing_media_file_is_reported_with_its_path(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -299,7 +299,7 @@ class NeverFiredStructuralAsserts(unittest.TestCase):
             source=base/'exam.json';source.write_text(json.dumps(exam,ensure_ascii=False),encoding='utf-8')
             with contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises((ValueError,AssertionError)) as caught:
-                    build.build(source,base/'out',ROOT/'examples/source-ledger.json')
+                    build._render(source,base/'out',ROOT/'examples/source-ledger.json')
             self.assertIn('找不到资源文件',str(caught.exception))
 
     # —— 需要真实构建才能走到的三条：用桩 ffprobe 给出时长 ——
@@ -323,7 +323,7 @@ class NeverFiredStructuralAsserts(unittest.TestCase):
             with patch.object(build.subprocess,'run',side_effect=self.fake_probe(duration)),\
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises((ValueError,AssertionError)) as caught:
-                    build.build(source,base/'out',ledger)
+                    build._render(source,base/'out',ledger)
             return str(caught.exception)
     def test_audio_evidence_end_beyond_the_clip_length_is_refused(self):
         def mutate(document):
@@ -356,7 +356,7 @@ class NeverFiredStructuralAsserts(unittest.TestCase):
                  patch.object(build.subprocess,'run',side_effect=self.fake_probe(8.0)),\
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises((ValueError,AssertionError)) as caught:
-                    build.build(source,base/'out',ledger)
+                    build._render(source,base/'out',ledger)
             self.assertIn('模板里的 __EXAM_DATA__ 占位符必须正好 1 个',str(caught.exception))
 
 

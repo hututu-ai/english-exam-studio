@@ -72,7 +72,7 @@ def make(base,output):
     source,ledger=make_browser_fixture.write_paper(base,document)
     import build,contextlib,io
     with contextlib.redirect_stdout(io.StringIO()):  # 构建报告由测试自己断言，不要刷屏
-        build.build(source,Path(output),ledger,profile='quick')
+        build._render(source,Path(output),ledger,profile='quick')
     return document
 
 if __name__=='__main__':

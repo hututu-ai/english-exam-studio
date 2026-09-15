@@ -321,7 +321,7 @@ class BuildRaises(unittest.TestCase):
                 self.skipTest('这套夹具没有登记外置音频，本判据无对象可测')
             target.write_bytes(wav_bytes(frames=0))
             with self.assertRaises(ValueError) as caught:
-                build.build(str(source / 'exam.json'), str(output), source_ledger=str(source / 'source-ledger.json'))
+                build._render(str(source / 'exam.json'), str(output), source_ledger=str(source / 'source-ledger.json'))
         self.assertIn('WAV 音频为空', str(caught.exception))
 
 

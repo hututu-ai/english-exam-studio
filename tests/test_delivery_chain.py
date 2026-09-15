@@ -44,7 +44,7 @@ class DeliveryChainTests(unittest.TestCase):
              'sections':data['sections']})
     def deliver(self,name,source,out,ledger,**kwargs):
         with contextlib.redirect_stdout(io.StringIO()):
-            build.build(source,out,ledger,**kwargs)
+            build._render(source,out,ledger,**kwargs)
         verified=verify_output(out)
         self.assertEqual(verified['status'],'passed',f'{name}: template verification failed')
         page=(out/'index.html').read_bytes()
@@ -95,7 +95,7 @@ class DeliveryChainTests(unittest.TestCase):
         source=fixture/'exam.json';ledger=fixture/'source-ledger.json'
         out=self.root/'out-listening'
         with contextlib.redirect_stdout(io.StringIO()):
-            build.build(source,out,ledger,selection='L1',mode='intensive',audio_mode='folder')
+            build._render(source,out,ledger,selection='L1',mode='intensive',audio_mode='folder')
         scope=self.read(out/'exam.json')
         self.assertEqual([s['id'] for s in scope['sections']],['L1'])
         self.assertEqual(scope['generation_scope']['mode'],'intensive')
@@ -119,7 +119,7 @@ class DeliveryChainTests(unittest.TestCase):
         data['sections'][0]['origin']={'exam_page':2,'page_images':['page-2.png','page-3.png'],'publication_status':'未确认原始出版来源'}
         source=self.write(self.root/'exam.json',data)
         out=self.root/'out-shared'
-        with contextlib.redirect_stdout(io.StringIO()):build.build(source,out,self.ledger_for(source))
+        with contextlib.redirect_stdout(io.StringIO()):build._render(source,out,self.ledger_for(source))
         environment={key:value for key,value in os.environ.items() if key!='PLAYWRIGHT_MODULE'}
         subprocess.run([node,str(ROOT/'scripts/browser_check.cjs'),str(out)],capture_output=True,
                        text=True,encoding='utf-8',errors='replace',timeout=60,env=environment)
@@ -161,7 +161,7 @@ class DeliveryChainTests(unittest.TestCase):
         if not chrome:self.skipTest('没有可用的 Chrome/Edge，跳过真实浏览器验收')
         source=self.demo()
         out=self.root/'out-timeout'
-        with contextlib.redirect_stdout(io.StringIO()):build.build(source,out,self.ledger_for(source))
+        with contextlib.redirect_stdout(io.StringIO()):build._render(source,out,self.ledger_for(source))
         environment={**os.environ,'CHROME_BIN':chrome,'BROWSER_ENGINE':'chromium','BROWSER_CHECK_TIMEOUT':'1'}
         subprocess.run([node,str(ROOT/'scripts/browser_check.cjs'),str(out),'--stress'],capture_output=True,
                        text=True,encoding='utf-8',errors='replace',timeout=120,env=environment)
@@ -189,7 +189,7 @@ class DeliveryChainTests(unittest.TestCase):
         if not chrome:self.skipTest('没有可用的 Chrome/Edge，跳过真实浏览器验收')
         source=self.demo()
         out=self.root/'out-plain'
-        with contextlib.redirect_stdout(io.StringIO()):build.build(source,out,self.ledger_for(source))
+        with contextlib.redirect_stdout(io.StringIO()):build._render(source,out,self.ledger_for(source))
         environment={**os.environ,'CHROME_BIN':chrome,'BROWSER_ENGINE':'chromium'}
         result=subprocess.run([node,str(ROOT/'scripts/browser_check.cjs'),str(out),'--stress'],capture_output=True,
                               text=True,encoding='utf-8',errors='replace',timeout=300,env=environment)

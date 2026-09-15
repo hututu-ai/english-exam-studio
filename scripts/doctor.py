@@ -48,7 +48,9 @@ def factor_for(path):
 
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--minutes',type=float,default=0,help='已知听力总时长（分钟），用于粗估转写耗时')
-    ap.add_argument('--json',action='store_true');a=ap.parse_args()
+    ap.add_argument('--json',action='store_true');ap.add_argument('--whisperx-python');ap.add_argument('--no-listening',action='store_true');a=ap.parse_args()
+    if a.no_listening:
+        print(json.dumps({'status':'not_needed','note':'本次无听力，跳过语音依赖探测和安装'},ensure_ascii=False));return 0
     force_utf8()
     hints=install_hints()
     report=describe_platform()
@@ -105,12 +107,22 @@ def main():
         notes.append('未检出 PDF/Office 命令行工具（'+hints['pdf']+'）：PDF 走逐页渲染加视觉识别，DOCX 仍可用 scripts/extract.py。')
     if report['family']=='windows':
         notes.append('Windows 提示：装完 ffmpeg/whisper 后重开终端让 PATH 生效；PowerShell 里用 where.exe ffmpeg 确认能定位到。')
+    from speech_runtime import choose
+    speech=choose(a.whisperx_python);report['speech_backend']=speech
+    report['legacy_capability']=report['capability']
+    if speech['status']=='package_ready' and report['legacy_capability']!='no_ffmpeg':
+        report['capability']='whisperx_package_ready'
+        notes=['WhisperX 环境已找到；不安装另一套后端。需检查权重并真实试跑短音频，才能确认本机可处理。']+[n for n in notes if n.startswith('未检出 PDF')]
+    else:
+        report['capability']='no_ffmpeg' if report['legacy_capability']=='no_ffmpeg' else 'whisperx_needs_setup'
+        notes=[n for n in notes if not any(t in n for t in ('whisper.cpp 未就绪','优先按 references/whisper-setup','可走完整自动分段','转写并发建议','规划估计'))]
+        notes.append('WhisperX 未就绪：已有同源时间字幕可复用；否则统一用 speech_runtime.py prepare 准备，不自动改装 whisper.cpp。')
     report['notes']=notes
     report['install_hints']=hints
     report['dependency_budget_seconds']=120
     report['dependency_failure_policy']='stop_download_continue_available_sections; see references/dependency-recovery.md'
     python_cmd='py -3' if report['family']=='windows' else 'python3'
-    report['next_step']={'full_auto':python_cmd+' scripts/audio.py analyze AUDIO --out WORK_AUDIO','silence_only':python_cmd+' scripts/prepare_whisper.py','no_ffmpeg':'在 exam.json 里直接指向原始音频文件，再跑 build.py'}[report['capability']]
+    report['next_step']=python_cmd+' scripts/listening_pipeline.py run（提供本次音频与原文题目）' if speech['status']=='package_ready' else python_cmd+' scripts/speech_runtime.py prepare（先确认安装范围）'
     text=json.dumps(report,ensure_ascii=False,indent=2)
     if a.json:print(text)
     else:

@@ -35,7 +35,7 @@ class DeliveryGates(unittest.TestCase):
         self.base=Path(self.temp.name)
         self.out=self.base/'out'
         with contextlib.redirect_stdout(io.StringIO()):
-            build.build(ROOT/'examples/demo-exam.json',self.out,ROOT/'examples/source-ledger.json')
+            build._render(ROOT/'examples/demo-exam.json',self.out,ROOT/'examples/source-ledger.json')
 
     def tearDown(self):self.temp.cleanup()
 
@@ -132,7 +132,7 @@ class OutputGates(unittest.TestCase):
         self.base=Path(self.temp.name)
         self.out=self.base/'out'
         with contextlib.redirect_stdout(io.StringIO()):
-            build.build(ROOT/'examples/demo-exam.json',self.out,ROOT/'examples/source-ledger.json')
+            build._render(ROOT/'examples/demo-exam.json',self.out,ROOT/'examples/source-ledger.json')
 
     def tearDown(self):self.temp.cleanup()
 

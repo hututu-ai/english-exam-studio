@@ -63,7 +63,7 @@ class SchemaExampleBuilds(unittest.TestCase):
         source.write_text(json.dumps(exam,ensure_ascii=False,indent=2),encoding='utf-8')
         out=self.root/'out'
         with contextlib.redirect_stdout(io.StringIO()):
-            build.build(source,out,self.ledger_for(exam))          # 失败会抛 ValueError，测试即失败
+            build._render(source,out,self.ledger_for(exam))          # 失败会抛 ValueError，测试即失败
         report=json.loads((out/'build-report.json').read_text(encoding='utf-8'))
         self.assertEqual(report['status'],'structural_checks_passed')
         self.assertEqual(report['feature_coverage']['status'],'passed',

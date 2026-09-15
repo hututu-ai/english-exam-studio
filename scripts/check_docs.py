@@ -23,7 +23,7 @@ from platform_tools import force_utf8
 
 ROOT=Path(__file__).resolve().parents[1]
 # 只在开发/发布时出现、不需要老师文档提及的脚本
-INTERNAL={'bounded_command.py','platform_tools.py','check_docs.py','read_acceptance.py','sentence_split.py','section_kinds.py','host_probe.py','smoke_report.py','extract_package.py','preview.py','package_skill.py','check_update.py','exam_document.py'}
+INTERNAL={'task_contract.py','speech_worker.py','bounded_command.py','platform_tools.py','check_docs.py','read_acceptance.py','sentence_split.py','section_kinds.py','host_probe.py','smoke_report.py','extract_package.py','preview.py','package_skill.py','check_update.py','exam_document.py'}
 
 SCRIPT_MENTION=re.compile(r'scripts[/\\]([A-Za-z_][A-Za-z0-9_]*\.py)')
 FLAG_MENTION=re.compile(r'(?<![\w-])(--[a-z][a-z0-9-]*)')

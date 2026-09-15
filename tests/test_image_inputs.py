@@ -196,7 +196,7 @@ class MultiPageOriginTests(unittest.TestCase):
             ledger={'sources':[{'role':'original_demo','path':'exam.json','sha256':hashlib.sha256(source.read_bytes()).hexdigest()}],'sections':exam['sections']}
             ledger_path=root/'source-ledger.json';ledger_path.write_text(json.dumps(ledger,ensure_ascii=False),encoding='utf-8')
             out=root/'out'
-            with contextlib.redirect_stdout(io.StringIO()):build.build(source,out,ledger_path)
+            with contextlib.redirect_stdout(io.StringIO()):build._render(source,out,ledger_path)
             written=json.loads((out/'exam.json').read_text(encoding='utf-8'))['sections'][0]['origin']['page_images']
             self.assertEqual(written,['sources/A-paper-1.png','sources/A-paper-2.png'])
             for name in written:self.assertTrue((out/name).is_file(),name)

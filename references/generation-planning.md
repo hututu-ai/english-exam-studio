@@ -35,7 +35,7 @@ python3 scripts/cost.py WORK/exam.json --plan WORK/generation-plan.json
 
 1. **只写选中的板块**：`--plan`、`scope.py` 或 `--sections` 先筛范围，未选章节不编写、不逐字读取。
 2. **长引文一律用 quote_ref**：写完跑 `python3 scripts/quotes.py fill WORK/exam.json` 回填逐字引文。省下的正是逐字抄写与对不齐后的重试。
-3. **先出可上课版**：材料大、时间紧时用 `--profile quick` 先交付能上课的完整讲评，再补 sentences/structure/writing_bank，最后 `--profile full` 重建。
+3. **先出可上课版**：材料大、时间紧时在教师确认计划中使用 `profile="quick"` 先交付能上课的完整讲评，再补 sentences/structure/writing_bank，最后更新计划为 `profile="full"` 并重新复核后重建。
 4. **复用转写与切片**：同一原音指纹的带时间转写直接复用；重复构建只改文字，不重跑 OCR/ASR、不重切音频。
 5. **分节写、局部改**：`parts.py split` 后每节一个文件，返工只重写一节，再 `merge` 合并；不要把整卷 JSON 贴回对话里改。
 6. **一轮改完校验错误**：构建一次列出本节全部问题，每条中文并带实际值（真实词频、要求/实际选项数、引文与段落 ID），末尾给出下一步。按清单一次改完再重跑——每多一轮返工就多几分钟和一轮 token。

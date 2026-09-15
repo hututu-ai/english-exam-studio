@@ -6,7 +6,7 @@
 
 第二问：扩展内容选哪些？**课堂批注、查词、速对答案、课堂工具、篇章精读、写作迁移、文化背景解读**。支持“全部”“基础讲评即可”“沿用上次设置”；精听推荐基础功能，可另选词句之外的扩展。基础功能保留原文、题目、答案与解析、定位、必要译文、音频/倍速/精听挖空、备课修订及记录导出。未选择的扩展不生成、不显示空入口；不是把完整档偷偷改为快速档。
 
-将老师的两项回答记录成 generation-plan.json，并用 `build.py ... --plan generation-plan.json` 构建：
+将老师的两项回答记录成 generation-plan.json，并用 `build.py ... --plan generation-plan.json --review teaching-review.json` 构建：
 
 ```json
 {"confirmed":true,"sections":"listening","mode":"intensive","profile":"full","features":{"annotations":false,"dictionary":false,"classroom_tools":false,"quick_answers":true,"writing_transfer":false,"deep_reading":false,"culture_background":false}}
@@ -14,7 +14,7 @@
 
 `sections` 接受 `all`、题型或实际章节 ID 逗号组合，`mode` 为 lesson/intensive，`profile` 为 full/quick，七个功能值必须全部记录。confirmed 只有收到范围和功能回答后才能置 true。迁移旧 exam.json 未带 features 时保留旧功能；新任务必须传计划，不能为了绕过未回答把 confirmed 直接填真。
 
-`profile` 的优先级：命令行 `--profile` 最高，其次计划里的 `profile`，都没有时为 `full`。也就是说老师同意"先出可上课版"时，把 `profile":"quick"` 写进计划即可，不必再额外记一个命令行参数；写错的值（例如 `fast`）会被明确拒绝，不会静默按 full 运行。
+`profile` 以老师本次确认的计划为准。新建计划还必须使用 `--response` 与 `--material` 登记实际回答和原件，详见 [新建与复核](reliable-generation.md)。命令行不能覆盖计划的范围、模式或档位；要改选项先更新计划。
 
 ## 文化背景
 

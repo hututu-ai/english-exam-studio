@@ -14,7 +14,15 @@
 
 **它按什么顺序做**：[生成主流程](references/harness.md)——第一步到第十三步，每一步写明谁做、跑什么命令、判定标准；标 🧑 的两步（问范围、问功能）必须等你回答，不会替你默认。
 
-**本版改了什么**：[本版更新说明](docs/RELEASE-NOTES.md)（给老师看的一页，含"你要做什么"）。想先看成品长什么样：`python3 scripts/build.py examples/demo-exam.json OUT --source-ledger examples/source-ledger.json`，用仓库自带的**合成演示卷**生成一份课件（演示卷只用于看功能，不代表真实试卷）。
+**本版改了什么**：[本版更新说明](docs/RELEASE-NOTES.md)（给老师看的一页，含"你要做什么"）。想先看成品长什么样：`python3 scripts/build.py examples/demo-exam.json OUT --demo --source-ledger examples/source-ledger.json`，用仓库自带的**合成演示卷**生成一份课件（演示卷只用于看功能，不代表真实试卷）。
+
+## 1.0.119：统一听力链路、每次选择与内容复核
+
+- 新建课件必须绑定本次材料、教师范围与七项功能选择；显式重建可沿用旧计划。
+- 自检、环境准备、短音频试跑、题组窗口、WhisperX 对齐、单题完整语境和试听后裁剪使用统一链路。
+- 文化背景保存来源正文与摘录；词义、篇章结构和精听挖空需要单独的有依据复核。内容改动后旧记录失效。
+- 自动化校验不等于语义无误，候选切点不等于已试听；未完成项明确阻止正式交付。
+- 操作详见 [新建与复核](references/reliable-generation.md)、[听力处理](references/whisperx-workflow.md)。
 
 ## 1.0.118：顶部更简洁，修复连排答案漏识别
 

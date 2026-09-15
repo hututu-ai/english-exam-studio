@@ -63,6 +63,6 @@ def write_paper(base,d):
 def make(base, output):
     d=paper_document(base)
     source,ledger=write_paper(base,d)
-    build.build(source,Path(output),ledger)
+    build._render(source,Path(output),ledger)
 if __name__=='__main__':
     force_utf8();make(sys.argv[1],sys.argv[2])

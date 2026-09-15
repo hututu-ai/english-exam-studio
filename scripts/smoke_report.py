@@ -57,7 +57,7 @@ def build_example(out):
     source=ROOT/'examples/demo-exam.json';ledger=ROOT/'examples/source-ledger.json'
     buffer=io.StringIO()
     with contextlib.redirect_stdout(buffer):
-        builder.build(source,out,ledger)
+        builder.build(source,out,ledger,demo=True)
     report=json.loads((out/'build-report.json').read_text(encoding='utf-8'))
     status='passed' if report.get('quality_gate',{}).get('status')=='automated_checks_passed' else 'failed'
     detail=f"structural={report.get('status')} · quality_gate={report.get('quality_gate',{}).get('status')} · answer_audit={report.get('answer_audit',{}).get('status')} · template={report.get('template_verification',{}).get('status')}"

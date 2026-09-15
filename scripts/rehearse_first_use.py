@@ -123,7 +123,7 @@ def rehearse(work,reports,skip_browser=False):
     step('4. 图片版答案绑定',('passed' if answers_ok(table) else 'failed'),
          f"来源={table.get('answer_source_kind')} · 题数={table.get('count')}",out or err)
     # 5 构建（用包内示例卷，按老师的计划）
-    code,out,err=run(['scripts/build.py','examples/demo-exam.json',str(work/'out'),'--source-ledger','examples/source-ledger.json','--plan',str(work/'plan.json')])
+    code,out,err=run(['scripts/build.py','--demo','examples/demo-exam.json',str(work/'out'),'--source-ledger','examples/source-ledger.json','--plan',str(work/'plan.json')])
     built=as_json(out)
     step('5. 构建',('passed' if build_ok(built) else 'failed'),
          f"status={built.get('status')} · 模板={built.get('template_verification',{}).get('status')} {built.get('template_verification',{}).get('template_version')} · 节={built.get('sections')} 题={built.get('questions')}",out or err)

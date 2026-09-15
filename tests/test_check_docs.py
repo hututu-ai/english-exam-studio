@@ -142,7 +142,7 @@ class ReadingCostClaims(unittest.TestCase):
         for phrase in ('只做听力（范围 A）','写教学内容（整卷）','全部文档（不应发生）'):
             self.assertIn(phrase,harness,f'省额度表缺少"{phrase}"这一行')
     def test_a_stale_size_claim_is_caught(self):
-        base=self.tree(lambda text:text.replace('两份加起来约 73KB','两份加起来约 60KB').replace('本页（约 8KB）','本页（约 5KB）'))
+        base=self.tree(lambda text:text.replace('两份加起来约 73KB','两份加起来约 60KB').replace('本页（约 10KB）','本页（约 5KB）'))
         problems=check_docs.reading_cost_problems(base)
         self.assertTrue(any('两份大文档合计' in item and '60KB' in item for item in problems),problems)
         self.assertTrue(any('本页' in item and '5KB' in item for item in problems),problems)

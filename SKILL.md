@@ -9,6 +9,14 @@ description: 将英语试卷、参考答案与听力音频制作成可离线使�
 
 **先看主流程**：[生成主流程（第一步到第十三步）](references/harness.md)——每一步写清"谁做、跑什么命令、判定标准、需要时再打开哪份文档"。标 🧑 的步骤（范围、功能）必须等老师回答，不许替他默认；不要凭印象跳步或改顺序，也不要把后面的步骤当成为前面失败开脱。
 
+## 1.0.119 必经入口
+
+执行 [新建、重建与内容复核](references/reliable-generation.md)。新建必须使用绑定本次原件指纹与真实教师回答的计划，并传入独立教学复核记录；`build.py` 缺 --plan / --review 会停止。重建使用 --rebuild-from 明确沿用旧计划，换卷重新确认。不得直接调用内部 `_render` 绕过任务入口。
+
+有听力时执行 [统一 WhisperX 链路](references/whisperx-workflow.md)，使用 speech_runtime.py → listening_pipeline.py。自检同样识别 WhisperX 环境，不因 whisper.cpp 缺失安装另一套。无听力用 doctor.py --no-listening。候选窗口、对齐成功、试听复核、浏览器播放是不同状态。
+
+背景需要已抓取来源正文与逐字摘录；词义、篇章结构与精听挖空均须执行 teaching_review.py 的独立内容复核。Agent 做第二遍实际判断，不要求老师填写 JSON，不假装程序能够自动保证所有语义正确。
+
 ## 安装完整性与首次选择（先做）
 
 老师侧的安装与提问说明在 [老师一页说明](docs/TEACHER-QUICKSTART.md)（含"遇到问题发什么回来"）；首次使用采用“收材料 → 盘点已有板块和听力原文 → 询问范围及扩展 → 仅准备必要依赖 → 生成与验收”。先邀请老师提供本次试卷、答案和音频；已给的不重复索取。缺材料只追问所选范围必需项，不要求阅读课提供听力。安装 Skill 时不捆绑下载语音模型。详见 [教师选项](references/teacher-options.md)。
@@ -17,7 +25,7 @@ description: 将英语试卷、参考答案与听力音频制作成可离线使�
 
 网络受限时按可靠性依次尝试**四条安装路径**（顺序与 `scripts/host_probe.py` 一致，先跑 `python3 scripts/host_probe.py --network` 看实测可用性）：① **老师把发布 ZIP 作为附件上传**（最稳，ZIP 约 2MB，下载可以在别的网络完成，安装只要这台机器拿到文件）；② 抓 `raw.githubusercontent.com` 上的文件——用 `python3 scripts/fetch_package.py --base https://raw.githubusercontent.com/hututu-ai/english-exam-studio/main --out 临时目录` 一条命令抓完并逐个核对 SHA256，不要手工逐个抓；③ raw 打不开时同一条命令换 CDN：`python3 scripts/fetch_package.py --base https://cdn.jsdelivr.net/gh/hututu-ai/english-exam-studio@main --out 临时目录`（第三方 CDN，哈希一致只证明传输没损坏、来源可信仍需官方 `SHA256SUMS.txt`）；④ 最后才是 `git clone github.com`——沙箱常拦 TLS 握手，失败不要反复重试。前三条抓完都必须 `check_install.py` 到 `complete` 才算装上。
 
-新任务读取 [教师选项](references/teacher-options.md)，先问“独立听力精听、整卷讲评还是指定板块？”（**只要听力就用这一档：同一套 Skill，不需要另装一个"听力版"**），再问“请多选本次需要的功能：批注、查词、速对答案、课堂工具、篇章精读、写作迁移、文化背景。”；已明确选择不重复问，未回答不默认整卷/全部功能。优先使用真正的多选控件；无多选控件则跑 `python3 scripts/plan.py menu` 打印编号清单，让老师一次回复多个编号，再用 `python3 scripts/plan.py make --confirmed --range ... --features ...` 生成计划（七项一定全记，缺 `--confirmed` 会报错，不替老师作答），并用 `plan.py check` 复核。不能用单选冒充多选。将真实回答写入 generation-plan.json，使用 `scripts/build.py ... --plan generation-plan.json`；固定基础功能始终保留，未选扩展不编写且不显示入口。详见 [范围与提速](references/generation-planning.md)。
+新任务读取 [教师选项](references/teacher-options.md)，先问“独立听力精听、整卷讲评还是指定板块？”（**只要听力就用这一档：同一套 Skill，不需要另装一个"听力版"**），再问“请多选本次需要的功能：批注、查词、速对答案、课堂工具、篇章精读、写作迁移、文化背景。”；已明确选择不重复问，未回答不默认整卷/全部功能。优先使用真正的多选控件；无多选控件则跑 `python3 scripts/plan.py menu` 打印编号清单，让老师一次回复多个编号，再用 `python3 scripts/plan.py make --confirmed --range ... --features ...` 生成计划（七项一定全记，缺 `--confirmed` 会报错，不替老师作答），并用 `plan.py check` 复核。不能用单选冒充多选。将真实回答写入 generation-plan.json，同时绑定 `--response` 与 `--material`，使用 `scripts/build.py ... --plan generation-plan.json --review teaching-review.json`；固定基础功能始终保留，未选扩展不编写且不显示入口。详见 [范围与提速](references/generation-planning.md)。
 
 ## 原件与交付检查（必读）
 
@@ -54,13 +62,13 @@ python3 scripts/host_probe.py --json
 4. **长句引用只写字符范围**：把引文写成 `{"paragraph_id":"A-p2","quote_ref":[120,158]}`（或 `source_quote_ref`），再用 `python3 scripts/quotes.py fill WORK/exam.json` 自动填成逐字引文。少打几百字引文，也不会因为一个字不一致反复构建失败；`quotes.py check` 能一次性列出所有对不上的引文。
 5. **一轮改完所有校验错误**：构建会把本节全部问题一次性列出来（结构校验与功能覆盖都会**一次列全**：一节里少三项就一次报三项，不会改一个再冒一个），每条都是中文并带实际值，例如 `第 21 题选项数不符：本节要求 4 项，实际 3 项（['A','B','C']）`、`章节 A 的生词 'loose' 在本节原文实际出现 1 次，条目写的是 9；请按原文改成实际次数`。看到 `共 N 处问题，一次改完再重跑` 就把清单一次全改完；末尾会给下一步（`references/schema.md` 查字段、`scripts/quotes.py fill` 回填引文）。不要改一条就重建一次——每多一轮就多花几分钟和一轮 token。
 
-**快速档与完整档**：`python3 scripts/build.py ... --profile quick` 只要求讲课必需项——逐题解析（题型/解法/易错/证据/干扰项/方法）、答案与答案出处、听力音频或说明与精听挖空、证据段落译文、至少一层词句；句子精讲、篇章结构、写作积累可以后补。报告里会列明 `missing_enrichment` 与 `delivery_status=quick_profile_...`，页面只显示已写好的内容。默认 `full` 要求齐全。用快速档时必须告诉老师"这是快速档，并逐项说明实际缺少的精读内容"，补齐字段后用 `--profile full` 重跑即可。
+**快速档与完整档**：在本次确认计划中写 `profile="quick"` 后使用 `build.py --plan ... --review ...` 只要求讲课必需项——逐题解析（题型/解法/易错/证据/干扰项/方法）、答案与答案出处、听力音频或说明与精听挖空、证据段落译文、至少一层词句；句子精讲、篇章结构、写作积累可以后补。报告里会列明 `missing_enrichment` 与 `delivery_status=quick_profile_...`，页面只显示已写好的内容。默认 `full` 要求齐全。用快速档时必须告诉老师"这是快速档，并逐项说明实际缺少的精读内容"，补齐字段并更新计划为 `profile="full"`、重新复核后重建即可。
 
 ## 跨平台与手机打开（Windows 老师同样可用）
 
 > 只在**交付或答疑**时读（Windows/手机打开、微信预览这类问题）；只写教学内容时可以跳过。
 
-读取 [Windows 与手机适配](references/platforms.md)。脚本在 Windows / macOS / Linux 上同一套代码：可执行文件按 `whisper-cli(.exe)`、`whisper(.exe)`、`main(.exe)` 依次查找，控制台强制 UTF-8 输出（避免中文报错在 cp936/cp1252 上崩掉），跨盘符路径自动退回绝对路径。Windows 上先复用已有 ffmpeg，缺少时再按权限准备，转写用 whisper.cpp；没有转写环境先协助安装并短音频验证，受限后由老师选择延长或替代路径，不静默降级。
+读取 [Windows 与手机适配](references/platforms.md)。脚本在 Windows / macOS / Linux 上同一套代码：可执行文件按 `whisper-cli(.exe)`、`whisper(.exe)`、`main(.exe)` 依次查找，控制台强制 UTF-8 输出（避免中文报错在 cp936/cp1252 上崩掉），跨盘符路径自动退回绝对路径。Windows 上先复用已有 ffmpeg，缺少时再按权限准备，默认转写与对齐统一用 WhisperX 独立环境；whisper.cpp 仅作为已有工具的备选；没有转写环境先协助安装并短音频验证，受限后由老师选择延长或替代路径，不静默降级。
 
 成品在手机上的两个真实坑要主动避免：一是文件夹模式下只发送 HTML 导致媒体缺失；默认内嵌模式已把听力写入 HTML，但原卷页图仍需随包传递；二是用微信内置浏览器打开本地 HTML，容易白屏或显示成源码。模板已加兼容层（补齐 `Array.at`、`matchAll`、`flatMap`、`Object.fromEntries`、`dialog.showModal`，隐藏未打开的弹窗，脚本没跑起来时显示中文提示而不是空白页），交付说明里要写清：整个文件夹一起拷贝、用系统浏览器打开、微信里选「用其他应用打开」、投屏上课建议用电脑。
 
@@ -233,7 +241,7 @@ API 是可选生成能力。见 [API接入取舍](references/api-options.md)：�
 
 > 模板行为说明：**写教学内容时可以跳过这一节**；只有改模板、或回答老师关于界面的问题时才需要读。
 
-默认使用本包 `assets/lesson.html`，运行 `scripts/build.py` 注入本卷 `exam.json`；不依据截图重写HTML，不调用其他网页/幻灯片技能替换模板，不因为执行失败就偷偷改成简化网页、PPT或仅含部分题型的版本。脚本执行条件不具备时明确说明未完成生成，不能拿替代品冒充本Skill成品。
+默认使用本包 `assets/lesson.html`，通过带计划与复核的 `scripts/build.py` 注入本卷 `exam.json`；不依据截图重写HTML，不调用其他网页/幻灯片技能替换模板，不因为执行失败就偷偷改成简化网页、PPT或仅含部分题型的版本。脚本执行条件不具备时明确说明未完成生成，不能拿替代品冒充本Skill成品。
 
 构建前核对 `assets/template-manifest.json`；生成后运行 `python3 scripts/verify_output.py OUTPUT_DIRECTORY`。它检查除题目数据外HTML与包内模板完全一致，且内嵌数据与exam.json一致。未通过不得称“同款课件生成完成”。只有用户明确要求个性化界面，才修改模板并重新生成清单、标明自定义版本，不能偷偷更新哈希绕过校验。
 

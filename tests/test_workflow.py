@@ -47,7 +47,7 @@ class Workflow(unittest.TestCase):
 
     def test_delivery_requires_current_browser_evidence_and_complete_html(self):
         out=self.base/'output'
-        with contextlib.redirect_stdout(io.StringIO()):build.build(ROOT/'examples/demo-reading.json',out,ROOT/'examples/source-ledger.json')
+        with contextlib.redirect_stdout(io.StringIO()):build._render(ROOT/'examples/demo-reading.json',out,ROOT/'examples/source-ledger.json')
         self.assertTrue((out/'打开课件.html').exists())
         with self.assertRaisesRegex(ValueError,'浏览器'):package(out,self.base/'lesson.zip')
         self.assertEqual(package(out,self.base/'preview.zip',True)['status'],'preview_only_browser_check_pending')
@@ -102,9 +102,11 @@ class Workflow(unittest.TestCase):
             output=io.StringIO()
             # 固定安装状态：doctor 在安装不完整时只报 installation 并提前返回（这是设计），
             # 不该让"工作树刚改过、还没重新打包"影响这个测能力档位的用例。
-            with patch.object(sys,'argv',['doctor.py','--json']),patch.object(check_install,'check',return_value={'status':'complete','version':'fixture','checked_files':0,'errors':[]}),patch.object(doctor,'tool',side_effect=lambda *names:names[0]),patch.object(doctor,'find_models',return_value=[{'path':'ggml-base.bin','size_gb':.15}]),patch.object(doctor,'first_line',side_effect=['ffmpeg version test','ffprobe version test' if probe_ok else '', 'usage: whisper' if asr_ok else '']),patch.object(doctor,'full_output',return_value='libmp3lame' if mp3 else 'aac'),contextlib.redirect_stdout(output):
+            with patch('speech_runtime.choose',return_value={'status':'needs_setup','backend':'whisperx'}),patch.object(sys,'argv',['doctor.py','--json']),patch.object(check_install,'check',return_value={'status':'complete','version':'fixture','checked_files':0,'errors':[]}),patch.object(doctor,'tool',side_effect=lambda *names:names[0]),patch.object(doctor,'find_models',return_value=[{'path':'ggml-base.bin','size_gb':.15}]),patch.object(doctor,'first_line',side_effect=['ffmpeg version test','ffprobe version test' if probe_ok else '', 'usage: whisper' if asr_ok else '']),patch.object(doctor,'full_output',return_value='libmp3lame' if mp3 else 'aac'),contextlib.redirect_stdout(output):
                 doctor.main()
-            self.assertEqual(json.loads(output.getvalue())['capability'],expected)
+            report=json.loads(output.getvalue())
+            self.assertEqual(report['legacy_capability'],expected)
+            self.assertEqual(report['capability'],'no_ffmpeg' if expected=='no_ffmpeg' else 'whisperx_needs_setup')
 
     def test_scope_keeps_expected_coverage_and_skips_unselected_invalid_section(self):
         d=copy.deepcopy(self.exam)
@@ -117,7 +119,7 @@ class Workflow(unittest.TestCase):
         ledger={'sources':[{'role':'original_demo','path':source.name,'sha256':hashlib.sha256(source.read_bytes()).hexdigest()}],'sections':d['sections']}
         ledger_path=self.base/'source-ledger.json';write(ledger_path,ledger)
         with contextlib.redirect_stdout(io.StringIO()):
-            build.build(source,self.base/'reading-only',ledger_path,selection='A')
+            build._render(source,self.base/'reading-only',ledger_path,selection='A')
         self.assertEqual(verify_output(self.base/'reading-only')['status'],'passed')
 
     def test_dependency_timeout_and_explicit_tool(self):
@@ -175,7 +177,7 @@ class Workflow(unittest.TestCase):
         for mode in ['embedded','folder']:
             out=self.base/mode
             with patch.object(build,'find_tool',return_value=None),contextlib.redirect_stdout(io.StringIO()):
-                build.build(source,out,ledger_path,audio_mode=mode)
+                build._render(source,out,ledger_path,audio_mode=mode)
             self.assertEqual(verify_output(out)['status'],'passed')
             html=(out/'index.html').read_text(encoding='utf-8')
             self.assertEqual(';base64,' in html.split('<script id="examData"')[1].split('</script>')[0],mode=='embedded')
@@ -197,7 +199,7 @@ class Workflow(unittest.TestCase):
 
         wav.write_bytes(wav.read_bytes()[:-100])
         with patch.object(build,'find_tool',return_value=None),self.assertRaisesRegex(ValueError,'WAV 数据被截断'):
-            build.build(source,self.base/'truncated-wav',ledger_path)
+            build._render(source,self.base/'truncated-wav',ledger_path)
 
     def test_external_transcript_skips_asr(self):
         source=self.base/'input.mp3';source.write_bytes(b'fixture')
@@ -232,7 +234,7 @@ class Workflow(unittest.TestCase):
         # hash must still match browser_check.cjs and package_lesson.py, which hash bytes.
         out=self.base/'crlf'
         with contextlib.redirect_stdout(io.StringIO()):
-            build.build(ROOT/'examples/demo-reading.json',out,ROOT/'examples/source-ledger.json')
+            build._render(ROOT/'examples/demo-reading.json',out,ROOT/'examples/source-ledger.json')
         page=out/'index.html'
         page.write_bytes(page.read_bytes().replace(b'\r\n',b'\n').replace(b'\n',b'\r\n'))
         result=verify_output(out)
@@ -257,11 +259,11 @@ class Workflow(unittest.TestCase):
         ledger={'sources':[{'role':'original_demo','path':source.name,'sha256':hashlib.sha256(source.read_bytes()).hexdigest()}],'sections':d['sections']}
         ledger_path=self.base/'source-ledger.json';write(ledger_path,ledger)
         out=self.base/'out'
-        with contextlib.redirect_stdout(io.StringIO()):build.build(source,out,ledger_path)
+        with contextlib.redirect_stdout(io.StringIO()):build._render(source,out,ledger_path)
         stale=out/'sources/B-paper.png'
         self.assertTrue(stale.exists(),'full build should package section B media')
         keep=out/'教师备注.txt';keep.write_text('note',encoding='utf-8')
-        with contextlib.redirect_stdout(io.StringIO()):build.build(source,out,ledger_path,selection='A')
+        with contextlib.redirect_stdout(io.StringIO()):build._render(source,out,ledger_path,selection='A')
         self.assertFalse(stale.exists(),'narrower rebuild must not ship the previous scope media')
         self.assertTrue(keep.exists(),'hand-placed teacher files must survive a rebuild')
     def test_listening_lesson_embeds_audio_and_supports_folder_mode(self):
@@ -296,7 +298,7 @@ class Workflow(unittest.TestCase):
         for mode,embedded in (('embedded',True),('folder',False)):
             out=self.base/('out-'+mode)
             with contextlib.redirect_stdout(io.StringIO()):
-                build.build(source,out,ledger_path,audio_mode=mode)
+                build._render(source,out,ledger_path,audio_mode=mode)
             report=json.loads((out/'build-report.json').read_text(encoding='utf-8'))
             self.assertEqual(report['audio_delivery']['mode'],mode)
             self.assertEqual(report['audio_embedded'],embedded)
@@ -311,10 +313,10 @@ class Workflow(unittest.TestCase):
         ledger_path=self.base/'source-ledger.json';write(ledger_path,ledger)
         with self.assertRaisesRegex((AssertionError,ValueError),'缺少「句子精讲」内容（sentences）'):
             with contextlib.redirect_stdout(io.StringIO()):
-                build.build(source,self.base/'full-out',ledger_path)
+                build._render(source,self.base/'full-out',ledger_path)
         out=self.base/'quick-out'
         with contextlib.redirect_stdout(io.StringIO()):
-            build.build(source,out,ledger_path,profile='quick')
+            build._render(source,out,ledger_path,profile='quick')
         report=json.loads((out/'build-report.json').read_text(encoding='utf-8'))
         self.assertEqual(report['profile'],'quick')
         self.assertEqual({item['missing'] for item in report['feature_coverage']['missing_enrichment']},{'sentences','structure','writing_bank'})
@@ -334,14 +336,14 @@ class Workflow(unittest.TestCase):
         write(plan,{'confirmed':True,'sections':'reading','mode':'lesson','profile':'quick','features':{k:False for k in preferences.DEFAULTS}})
         out=self.base/'out'
         with contextlib.redirect_stdout(io.StringIO()):
-            build.build(source,out,ledger_path,plan=plan)
+            build._render(source,out,ledger_path,plan=plan)
         report=json.loads((out/'build-report.json').read_text(encoding='utf-8'))
         self.assertEqual(report['profile'],'quick')
         self.assertEqual({item['missing'] for item in report['feature_coverage']['missing_enrichment']},{'sentences','structure','writing_bank'})
         self.assertEqual(report['generation_scope']['mode'],'lesson')
         with self.assertRaisesRegex((AssertionError,ValueError),'缺少「句子精讲」内容（sentences）'):
             with contextlib.redirect_stdout(io.StringIO()):
-                build.build(source,self.base/'out-full',ledger_path,profile='full',plan=plan)
+                build._render(source,self.base/'out-full',ledger_path,profile='full',plan=plan)
     def test_plan_rejects_an_unknown_profile(self):
         plan={'confirmed':True,'sections':'reading','mode':'lesson','profile':'fast','features':{k:False for k in preferences.DEFAULTS}}
         with self.assertRaisesRegex(ValueError,'profile'):
@@ -376,7 +378,7 @@ class Workflow(unittest.TestCase):
         table=src/'answers.json';write(table,answers.extract(key))
         out=self.base/'official-out'
         with contextlib.redirect_stdout(io.StringIO()):
-            build.build(src/'exam.json',out,src/'source-ledger.json',answer_key=str(table))
+            build._render(src/'exam.json',out,src/'source-ledger.json',answer_key=str(table))
         report=json.loads((out/'build-report.json').read_text(encoding='utf-8'))
         self.assertEqual(report['quality_gate']['status'],'automated_checks_passed',report['quality_gate']['errors'])
         self.assertGreaterEqual(report['answer_audit']['counts']['official'],6)
@@ -385,7 +387,7 @@ class Workflow(unittest.TestCase):
         # 跳过项（功能未开启/无数据）不能被读成"已通过"，交付报告必须如实列出。
         out=self.base/'skipped-out'
         with contextlib.redirect_stdout(io.StringIO()):
-            build.build(ROOT/'examples/demo-reading.json',out,ROOT/'examples/source-ledger.json')
+            build._render(ROOT/'examples/demo-reading.json',out,ROOT/'examples/source-ledger.json')
         verified=verify_output(out)
         page=(out/'index.html').read_bytes()
         write(out/'browser-check.json',{'status':'passed','engine':'unit-test-fixture','html_sha256':hashlib.sha256(page).hexdigest(),

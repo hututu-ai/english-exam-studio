@@ -1,5 +1,7 @@
 # 生成主流程：第一步到第十三步（助手按这个顺序做）
 
+1.0.119 起，先读 [新建、重建与内容复核](reliable-generation.md)。下列生成步骤必须携带本次绑定计划与复核记录；听力统一按 [WhisperX 链路](whisperx-workflow.md) 执行。
+
 这一页是**路由**，不是第二份说明书：每一步只写"谁做 → 命令 → 判定标准 → 需要时再打开哪一份文档"。
 细节一律留在被指向的文档里，避免两处说法漂移；这里出现的脚本与参数由 `check_docs.py` 每次发布前核对，
 写错会直接失败。
@@ -13,14 +15,14 @@
 
 | 情形 | 实际阅读量 | 说明 |
 | --- | --- | --- |
-| 只做听力（范围 A） | 约 26KB | 本页 8KB + [听力](listening.md) 7KB + `SKILL.md` 里两节听力 4KB + `schema.md` 顶部清单 6KB |
+| 只做听力（范围 A） | 约 26KB | 本页 10KB + [听力](listening.md) 7KB + `SKILL.md` 里两节听力 4KB + `schema.md` 顶部清单 6KB |
 | 写教学内容（整卷） | 约 30KB 起 | 上一行换成"命中的那几节 `schema.md`"；没勾的功能节不读 |
 | 全部文档（不应发生） | 约 222KB | `SKILL.md`+`schema.md` 73KB，`references/` 20 份共 149KB |
 
 
 | 你要做的事 | 读这些 | 可以跳过 |
 | --- | --- | --- |
-| 走完整条流程 | 本页（约 8KB） | 其余先不读 |
+| 走完整条流程 | 本页（约 10KB） | 其余先不读 |
 | 写 `exam.json` | `schema.md` 顶部「先看这里：按本次选择决定要写哪些字段」+ **只读命中的那几节** | 没勾选功能对应的节（文化背景／写作迁移／篇章精读／听力／七选五／图片选项／逐句译文…） |
 | 选范围与功能 | `teacher-options.md`，以及 `generation-planning.md` 里的省时几条 | 其余 |
 | 收材料 | 只有图片才读 `image-inputs.md`；有音频才读 `listening.md`（没有转写再看 `listening-alternatives.md`），以及 `SKILL.md` 里两处标了「只在本次有听力时读这一节」的小节（`## 二、自动分段与精听`、`### 听力三档接入`） | 没有该材料就不读（原卷没有听力就别碰这几节） |
@@ -53,14 +55,16 @@
 
 ### 第 4 步 🧑 问功能（七项多选）
 
-- 命令：`python3 scripts/plan.py menu` → `python3 scripts/plan.py make --confirmed --range A --features 1,3,5 --out WORK/generation-plan.json` → `python3 scripts/plan.py check WORK/generation-plan.json`
+- 命令：`python3 scripts/plan.py menu` → `python3 scripts/plan.py make --confirmed --range A --features 1,3,5 --response "老师本次实际回答" --material paper=WORK/试卷.pdf --material answers=WORK/答案.docx --material audio=WORK/听力.mp3 --out WORK/generation-plan.json` → `python3 scripts/plan.py check WORK/generation-plan.json`
+- 无听力时省略 audio 材料，已有材料按实际角色逐项登记。
 - 判定：七项全部记录在案、`--confirmed` 已由老师确认、计划与老师回答一致。不能替老师勾选，也不能用单选冒充多选。
 - 详见 [教师选项](teacher-options.md)。
 
 ### 第 5 步 🤖 环境与宿主自检
 
-- 命令：`python3 scripts/doctor.py --minutes 20` 与 `python3 scripts/host_probe.py --json`
-- 判定：能说清这次听力走哪一档、依据是哪个字段、宿主能不能跑 Python/浏览器；缺工具按实际降级并写明。
+- 命令：仅本次有听力时 `python3 scripts/speech_runtime.py probe` 与 `python3 scripts/doctor.py --minutes 20` 与 `python3 scripts/host_probe.py --json`
+- 无听力用 `python3 scripts/doctor.py --no-listening`，跳过语音探测与安装。
+- 判定：能说清所选后端、宿主能不能跑 Python/浏览器；缺工具先按统一链路准备，仍受限时由老师选择后续方案，不静默降级。
 - 详见 [无 Whisper 的听力路径](listening-alternatives.md) 与 [宿主能力与回退](host-compatibility.md)。
 
 ### 第 6 步 🤖 答案原件 → 答案表 → 台账
@@ -81,9 +85,13 @@
 - 判定：每节的栏目由"这节实际有的材料 + 老师选的功能"决定；原卷没有的题型不生成，原卷有的不删。
 - 详见 [范围与提速](generation-planning.md) 与 [内容真实性](#三条贯穿全程的纪律)。
 
+本次有听力时，此时执行 [统一 WhisperX 链路](whisperx-workflow.md)：短音频试跑或复用、查找题组、对齐、单题完整语境、试听与裁剪。音频清单通过后构建时传 `--audio-bundle WORK/audio-out`。
+
+在本步写作后、构建前执行 `python3 scripts/teaching_review.py draft WORK/exam.json --plan WORK/generation-plan.json --out WORK/teaching-review.json`，另起一遍实际语义核对；清单不自动标通过。
+
 ### 第 9 步 🤖 构建
 
-- 命令：`python3 scripts/build.py WORK/exam.json OUTPUT --source-ledger WORK/source-ledger.json --plan WORK/generation-plan.json`
+- 命令：`python3 scripts/build.py WORK/exam.json OUTPUT --source-ledger WORK/source-ledger.json --plan WORK/generation-plan.json --review WORK/teaching-review.json`
 - 判定：`status=structural_checks_passed` 且没有阻塞项。报错会**一次列全并带实际值**——把清单一次改完再重跑，**不要改一条重建一次**（这是"生成特别久"最主要的来源）。
 - 详见 [内容数据格式](schema.md)。
 

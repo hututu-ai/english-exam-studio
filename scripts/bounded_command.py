@@ -11,7 +11,7 @@ def run(command, seconds=120):
     try:
         out,err=p.communicate(timeout=seconds)
         return p.returncode,out,err
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired,KeyboardInterrupt) as interruption:
         if os.name=='nt':
             # Only the process tree created by this invocation; no administrator prompt.
             subprocess.run(['taskkill','/PID',str(p.pid),'/T','/F'],capture_output=True,timeout=10)
@@ -21,6 +21,7 @@ def run(command, seconds=120):
         try:out,err=p.communicate(timeout=5)
         except subprocess.TimeoutExpired:
             p.kill();out,err=p.communicate(timeout=5)
+        if isinstance(interruption,KeyboardInterrupt):return 130,out,err+'\n用户已取消，已终止本次子进程。'
         return 124,out,err+f'\n依赖命令超过 {seconds:g} 秒，已终止；停止换源重试，继续无需该依赖的板块。'
 
 def main():

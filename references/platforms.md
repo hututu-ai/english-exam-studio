@@ -1,5 +1,8 @@
 # Windows 与手机适配
 
+1.0.119 默认处理入口为 [统一 WhisperX 链路](whisperx-workflow.md)。先记录老师本次范围与功能。下文 whisper.cpp 命令仅供已存在的备选环境使用，不因缺少它而安装另一套；不经老师同意降级。
+
+
 这个 Skill 的脚本在 Windows、macOS、Linux 上跑同一套 Python 代码；差异集中在「外部工具怎么装」和「手机怎么打开成品」。开工先跑 `py -3 scripts/doctor.py --minutes 听力时长`，它会按当前系统给出该走哪一档。
 
 ## 一、Windows

@@ -88,7 +88,7 @@ class ChecklistMatchesReality(unittest.TestCase):
 
     def test_documented_build_produces_the_files_the_checklist_promises(self):
         """§5 写"应看到 index.html、打开课件.html、exam.json、build-report.json、answer-audit.json"。"""
-        self.run_script('build.py','examples/demo-exam.json',self.out,
+        self.run_script('build.py','--demo','examples/demo-exam.json',self.out,
                         '--source-ledger','examples/source-ledger.json')
         for name in ('index.html','打开课件.html','exam.json','build-report.json','answer-audit.json'):
             self.assertTrue((self.out/name).is_file(),f'§5 承诺能看到 {name}，实际没有')
@@ -97,7 +97,7 @@ class ChecklistMatchesReality(unittest.TestCase):
 
     def test_packaging_refuses_then_explains_both_gates(self):
         """§7：没有当期浏览器验收与人工复核清单时必须拦，而且要把两道闸门都说出来。"""
-        self.run_script('build.py','examples/demo-exam.json',self.out,
+        self.run_script('build.py','--demo','examples/demo-exam.json',self.out,
                         '--source-ledger','examples/source-ledger.json')
         refused=self.run_script('package_lesson.py',self.out,Path(self.temp.name)/'demo.zip',expect=1)
         message=(refused.stderr or '')+(refused.stdout or '')
@@ -112,7 +112,7 @@ class ChecklistMatchesReality(unittest.TestCase):
     def test_quality_report_flow_matches_the_checklist(self):
         """§9 第 7 步：init 生成条目 → check 必须先拒空结论 → 填完返回 ok。"""
         import qa_report
-        self.run_script('build.py','examples/demo-exam.json',self.out,
+        self.run_script('build.py','--demo','examples/demo-exam.json',self.out,
                         '--source-ledger','examples/source-ledger.json')
         self.run_script('qa_report.py','init',self.out)
         report_file=self.out/'qa-report.md'
