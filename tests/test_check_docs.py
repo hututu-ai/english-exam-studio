@@ -134,7 +134,7 @@ class ReadingCostClaims(unittest.TestCase):
         (base/'SKILL.md').write_bytes((ROOT/'SKILL.md').read_bytes())
         (base/'references'/'schema.md').write_bytes((ROOT/'references'/'schema.md').read_bytes())
         harness=(ROOT/'references'/'harness.md').read_text(encoding='utf-8')
-        (base/'references'/'harness.md').write_text(transform(harness) if transform else harness,encoding='utf-8')
+        (base/'references'/'harness.md').write_bytes((transform(harness) if transform else harness).encode('utf-8'))
         return base
     def test_repository_reading_cost_claims_match_the_files(self):
         self.assertEqual(check_docs.reading_cost_problems(ROOT),[])

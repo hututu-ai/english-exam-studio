@@ -351,7 +351,7 @@ class FetchPackageRaises(unittest.TestCase):
             (base / 'install-manifest.json').write_text(json.dumps({'version': '9.9.9', 'files': {'SKILL.md': 'x'}}),
                                                         encoding='utf-8')
             with self.assertRaises(ValueError) as caught:
-                fetch_package.fetch_package('file://' + str(base), str(base / 'out'), expected_version='1.0.117')
+                fetch_package.fetch_package(base.resolve().as_uri(), str(base / 'out'), expected_version='1.0.117')
         self.assertIn('这个包的版本是 9.9.9', str(caught.exception))
         self.assertIn('1.0.117', str(caught.exception))
 
@@ -404,6 +404,7 @@ class SecondBatchRaises(unittest.TestCase):
         """没有 CMake/C++ 时先说清楚，而不是先下载源码再报错。"""
         with tempfile.TemporaryDirectory() as temp:
             with mock.patch.object(setup, 'whisper_bin', lambda: None), \
+                 mock.patch.object(setup.platform, 'system', lambda: 'Darwin'), \
                  mock.patch.object(setup.shutil, 'which', lambda name: None):
                 with self.assertRaises(ValueError) as caught:
                     setup.prepare(temp, True, 60)
@@ -511,7 +512,7 @@ class SecondBatchRaises(unittest.TestCase):
             base = Path(temp)
             (base / 'install-manifest.json').write_text(json.dumps({'version': '1.0.117'}), encoding='utf-8')
             with self.assertRaises(ValueError) as caught:
-                fetch_package.fetch_package('file://' + str(base), str(base / 'out'))
+                fetch_package.fetch_package(base.resolve().as_uri(), str(base / 'out'))
         self.assertIn('里没有 files 清单', str(caught.exception))
 
 
@@ -585,7 +586,8 @@ class EveryReleaseCriterionIsMentionedInTests(unittest.TestCase):
         其实守卫压根咬不动"（这正是上一版口径的真实翻车方式）。
         """
         target = ROOT / 'scripts' / 'parts.py'
-        original = target.read_text(encoding='utf-8')
+        original_bytes = target.read_bytes()
+        original = original_bytes.decode('utf-8')
         # 变异串在运行时拼出来：直接写成字面量的话，它会出现在**本文件**里，守卫于是判定
         # "已被测试提到"——那就成了自己骗自己（上一版正是这么翻的车）。
         rare = ''.join(['獬豸', '甪端', '饕餮', '貔貅', '睚眦', '螭吻'])
@@ -598,8 +600,8 @@ class EveryReleaseCriterionIsMentionedInTests(unittest.TestCase):
             self.assertTrue(found, '变异判据写进了发布脚本，守卫却没报——这条守卫是假的')
             self.assertIn(rare[:2], found[0][2])
         finally:
-            target.write_text(original, encoding='utf-8')
-        self.assertEqual(original, target.read_text(encoding='utf-8'), '验证后必须逐字节还原，不能留下改动')
+            target.write_bytes(original_bytes)
+        self.assertEqual(original_bytes, target.read_bytes(), '验证后必须逐字节还原，不能留下改动')
         self.assertEqual([], [row for row in unmentioned_messages() if row[0] == 'parts.py'], '还原后不该还有问题')
 
 

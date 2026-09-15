@@ -68,6 +68,7 @@ def find_tool(*names):
                 candidate=Path(directory)/(name+('.exe' if IS_WINDOWS else ''))
                 if candidate.is_file():return str(candidate.resolve())
         found=shutil.which(name)
+        if found and IS_WINDOWS and name in WHISPER_NAMES and Path(found).suffix.lower()!='.exe':continue
         if found:return found
     return None
 

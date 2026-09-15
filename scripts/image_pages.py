@@ -74,7 +74,7 @@ def inventory(files,directory,role,relative_to=None,spread=False,pages_per_image
     paths=collect(files,directory)
     if not paths:raise ValueError('没有找到图片文件（支持 '+' '.join(sorted(IMAGE_SUFFIXES))+'）')
     # 路径按 source-ledger.json 所在目录（通常是当前工作目录）输出，quality_gate 才找得到。
-    base=Path(relative_to).resolve() if relative_to else Path.cwd()
+    base=Path(relative_to).resolve() if relative_to else Path.cwd().resolve()
     pages=[];problems=[];seen={}
     if not files:
         # 扫文件夹会递归子目录：老师的"原图/裁剪"、多批照片只要同时在，页集合就会悄悄变成几倍，

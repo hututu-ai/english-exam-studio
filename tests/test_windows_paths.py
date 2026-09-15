@@ -19,6 +19,8 @@ class WindowsBranchTests(unittest.TestCase):
             environ['LOCALAPPDATA']=temp
             with patch.object(platform_tools,'IS_WINDOWS',True),patch.dict(os.environ,environ,clear=True),patch('shutil.which',return_value=None):
                 self.assertEqual(platform_tools.find_tool('ffmpeg'),str(binary.resolve()))
+            with patch.object(platform_tools,'IS_WINDOWS',True),patch.dict(os.environ,{'LOCALAPPDATA':temp},clear=True),patch('shutil.which',return_value='C:/Windows/system32/main.CPL'):
+                self.assertIsNone(platform_tools.find_tool('main'))
     def test_runtime_root_uses_localappdata_on_windows(self):
         with tempfile.TemporaryDirectory() as temp:
             with patch.object(platform_tools,'IS_WINDOWS',True),patch.dict(os.environ,{'LOCALAPPDATA':temp},clear=True):
