@@ -12,4 +12,4 @@ VERSION text eol=lf
 LICENSE text eol=lf
 
 # 双击运行的一键体检脚本：必须 CRLF，且不要在检出时被转换
-*.bat text eol=crlf
+*.bat -text
