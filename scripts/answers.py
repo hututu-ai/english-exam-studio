@@ -171,6 +171,14 @@ def normalise_letters(raw):
 
 def expand(line):
     """Extract {number: answer} pairs from one line, including ranges such as 21-25 ABCDA."""
+    # Word answer sheets may place several numbered answers in a single paragraph,
+    # without spaces between the preceding answer and the next question number.
+    markers=list(re.finditer(r'(?<!\d)(\d{1,3})[.、．]\s*',line))
+    if len(markers)>1 and not line[:markers[0].start()].strip():
+        numbers=[int(m[1]) for m in markers]
+        values=[text_answer(line[m.end():markers[i+1].start() if i+1<len(markers) else len(line)]) for i,m in enumerate(markers)]
+        if numbers==list(range(numbers[0],numbers[0]+len(numbers))) and all(values) and all(not re.search(r'\d',v) for v in values):
+            return {str(n):v for n,v in zip(numbers,values)}
     found={}
     for m in re.finditer(r'(\d{1,3})\s*[-—~－]\s*(\d{1,3})\s*[:：]?\s*([A-Ha-h]{1,8})',line):
         start,end,letters=int(m.group(1)),int(m.group(2)),m.group(3).upper()

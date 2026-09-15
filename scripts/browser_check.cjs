@@ -283,8 +283,10 @@ async function main(){
    const scoped=exam.dictionary||{};
    assert.ok(Object.keys(scoped).length>0,'dictionary feature is on but no entries were embedded — the offline lookup check would be vacuous');
    const dictWord=(exam.sections.flatMap(s=>s.quick_words||[]).map(w=>w.word).find(w=>scoped[String(w).toLowerCase()]))||Object.keys(scoped)[0];
-   await p.locator('#lookupInput').fill(dictWord);
-   await p.locator('#lookupForm button[type="submit"]').click();
+   await p.locator('[id^="section-"] .word:visible').first().click();
+   await p.locator('[data-action="quickFull"]').click();
+   await p.locator('#dictSearchInput').fill(dictWord);
+   await p.locator('#dictSearchForm button[type="submit"]').click();
    await p.waitForFunction(()=>{const el=document.querySelector('#dictResult');return el&&el.innerText.trim().length>0});
    assert.match(await p.locator('#dictResult').innerText(),/ECDICT|离线/,'a lesson word must resolve from the bundled dictionary without network');
    const closer=p.locator('[data-close="dictDialog"]');
@@ -310,7 +312,7 @@ async function main(){
  await p.evaluate(record=>restoreRecord(record),record);assert.equal(await p.evaluate(id=>qmap.get(id).q.answer,q.id),other);assert.equal(await p.evaluate(id=>qmap.get(id).q.strategy,q.id),'教师自定义迁移方法');ok('teacher-answer-edit-validation-persistence-restore-import');}
  for(const sect of exam.sections.filter(s=>!isListening(s))){await go(p,sect);if(exam.features?.deep_reading===false)assert.equal(await p.locator(`#section-${sect.id} [data-mode="deep"]`).count(),0);if(exam.features?.writing_transfer===false)assert.equal(await p.locator(`#section-${sect.id} [data-mode="writing"]`).count(),0)}
  if(exam.features?.culture_background){const sect=exam.sections.find(s=>s.culture_background?.length);if(sect){await go(p,sect);await p.locator(`#section-${sect.id} .culture-background summary`).click();await p.locator(`#section-${sect.id} [data-action="cultureLocate"]`).first().click();assert.ok(await p.evaluate(()=>Object.keys(state.marks).length>0));ok('culture-card-and-source-location')}}
- if(exam.features?.dictionary===false)assert.ok(await p.locator('#lookupForm').isHidden(),'dictionary off must hide the lookup form');
+ assert.equal(await p.locator('#lookupForm').count(),0,'the top toolbar must not contain a dictionary search form');
  if(exam.features?.annotations===false)assert.ok(await p.locator('#annotate').isHidden(),'annotations off must hide the annotation entry');
  if(exam.features?.quick_answers===false)assert.ok(await p.locator('#quickAnswers').isHidden(),'quick_answers off must hide the fast-answer entry');
  if(exam.features?.classroom_tools===false)assert.ok(await p.locator('#classroom').isHidden(),'classroom_tools off must hide the classroom entry');

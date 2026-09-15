@@ -409,13 +409,13 @@
 ### 1.0.45
 - **报错一次列全 + 中文化 + 带实际值**：`validate_section` 每组检查单独兜住，一次构建列出本节全部问题（改前只报第一个，同样 5 个问题要重建 5 次）；全仓脚本 85 条英文报错改为中文并给出实际值与下一步；同一处挖空错误不再重复报。新增 `tests/test_messages.py` 用 AST 静态锁住"报错必须中文且带说明"。
 
-## 当前状态（按目标逐条对照，1.0.117）
+## 当前状态（按目标逐条对照）
 
 > 标题里的版本号必须等于 `VERSION`（`scripts/check_docs.py` 核对）——它的含义是"发这一版时，这张表**逐条复核过**、结论仍然成立"，所以发版时要么确认它没变（只改版本号），要么把变了的结论一并改掉；确认不了就别写版本号。
 
 | 目标里的问题 | 状态 | 证据在哪 |
 | --- | --- | --- |
-| ① Windows 必须能用 | **代码侧已就绪，缺实机**：同一套纯标准库脚本；CRLF 下按原始字节算指纹（1.0.19）；cp1252/cp936 下 `force_utf8()` 兜底（1.0.16）；路径与保留设备名有专门测试；**新增静态闸门**把"用了 Windows 上不存在的接口/依赖执行位/调 POSIX shell 而没有平台判断"的写法挡在本机（1.0.117）。CI 侧：测试作业（三平台 × 两版本）是唯一红绿判定，另有三个**非阻塞证据作业**（doctor / smoke / browser）。**如实记**：Windows 格上 `browser_check.cjs --stress` 一步历史上报过失败且原因未定位，故 Windows 的浏览器交互仍算"未验证" | `tests/test_windows_paths.py`、`tests/test_windows_portability.py`、`.github/workflows/compatibility.yml`、[Windows 验收清单](WINDOWS.md) 第 9 节的"在案未决问题" |
+| ① Windows 必须能用 | **代码侧已就绪，缺实机**：同一套纯标准库脚本；CRLF 下按原始字节算指纹（1.0.19）；cp1252/cp936 下 `force_utf8()` 兜底（1.0.16）；路径与保留设备名有专门测试；**新增静态闸门**把"用了 Windows 上不存在的接口/依赖执行位/调 POSIX shell 而没有平台判断"的写法挡在本机（1.0.117）。CI 侧：单元测试（三平台 × 两版本）及浏览器点击（三平台）共同参与红绿判定，doctor / smoke 保留为非阻塞证据。自动检查使用合成示例；真实 Windows 教师电脑、WorkBuddy 和豆包宿主仍需分别验收 | `tests/test_windows_paths.py`、`tests/test_windows_portability.py`、`.github/workflows/compatibility.yml`、[Windows 验收清单](WINDOWS.md) 第 9 节的"在案未决问题" |
 | ② 生成特别久 | 已定位并分档量化：**脚本侧** 32 节/64 题 = 构建 0.68 秒 + 产物核验 0.01 秒 + 浏览器点击验收 45.7 秒（1.0.76 去掉了重复检测的平方级热点、1.0.77 去掉了词库裁剪热点，构建 4.26s→0.68s）；浏览器验收按约 0.27 秒/题增长且刻意不走近路（真点真播）。**主要时间仍花在助手返工与轮次**，故做了"报错一次列全"、可照做的中文提示、快速档、分节写作与一页主流程 | `docs/VERIFICATION.md` 1.0.45 / 1.0.76 / 1.0.77 的耗时实测；`references/generation-planning.md`、`references/harness.md` |
 | ③ 省 token / 省积分 | 已做：只做所选范围、长引文 `quote_ref` 回填、按篇裁剪离线词库、快速档、逐字重复账单、改写型人工清单 | `scripts/cost.py --duplicates`、`scripts/scope.py`、`scripts/quotes.py` |
 | ④ 豆包工作 / WorkBuddy 表现更好 | **探测+指引+判读已就绪，缺实机**：四条安装路径与可用性（老师上传 ZIP → 抓 raw → jsDelivr 备选 → git clone）、无多选控件走编号清单、预览受限就交付下载包、受限网络优先"老师上传 ZIP" | `scripts/host_probe.py --network`、`references/host-compatibility.md` |
