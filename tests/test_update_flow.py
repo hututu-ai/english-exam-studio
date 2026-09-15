@@ -93,7 +93,7 @@ class UpdateFlowTests(unittest.TestCase):
             message=str(caught.exception)
             self.assertIn('复制 VERSION 时失败',message,'要点名真正失败的文件，不能报成另一个')
             self.assertIn('恢复成更新前的内容',message)
-            self.assertIn(str(root/'backup'),message,'要给出手动恢复的位置')
+            self.assertIn(str((root/'backup').resolve()),message,'要给出手动恢复的位置')
             self.assertEqual((current/'SKILL.md').read_text(encoding='utf-8').strip(),'# skill 1.0.0')
             self.assertEqual((current/'VERSION').read_text(encoding='utf-8').strip(),'1.0.0')
             self.assertTrue((root/'backup'/'SKILL.md').is_file(),'备份要真的存在，回滚才有依据')

@@ -96,7 +96,7 @@ def inventory(files,directory,role,relative_to=None,spread=False,pages_per_image
         if not data:
             problems.append({'code':'empty_file','file':str(path),'message':'文件是空的，可能是下载或截图失败'});continue
         sha=digest_bytes(data)
-        try:relative=str(path.resolve().relative_to(base))
+        try:relative=path.resolve().relative_to(base).as_posix()
         except ValueError:
             relative=str(path.resolve())
             problems.append({'code':'path_outside_base','file':relative,'message':'图片不在台账所在目录之下；请把它放进工作目录，或把 source-ledger.json 放在素材同级再生成清单'})

@@ -303,11 +303,15 @@ class NeverFiredStructuralAsserts(unittest.TestCase):
             self.assertIn('找不到资源文件',str(caught.exception))
 
     # —— 需要真实构建才能走到的三条：用桩 ffprobe 给出时长 ——
-    def stub_ffprobe(self,base,duration):
-        path=base/'ffprobe_stub.sh'
-        path.write_text(f'#!/bin/sh\necho "{duration}"\n',encoding='utf-8')
-        path.chmod(path.stat().st_mode|stat.S_IEXEC)
-        return path
+    def fake_probe(self,duration):
+        """给 build.subprocess.run 打桩，模拟 ffprobe 报时长（跨平台，不依赖可执行文件）。"""
+        class Result:
+            returncode=0;stderr=''
+            def __init__(self,stdout):self.stdout=stdout
+        def run(argv,**kwargs):
+            if any('format=duration' in str(a) for a in argv):return Result(f'{float(duration)}\n')
+            raise AssertionError('测试桩只预期 ffprobe 的时长查询：'+repr(argv))
+        return run
     def listening_build_error(self,mutate,duration=8.0):
         """用仓库自带的听力夹具（含真实 wav）构建一次，注入缺陷后取报错文字。"""
         import make_browser_fixture as fixture
@@ -316,7 +320,7 @@ class NeverFiredStructuralAsserts(unittest.TestCase):
             document=fixture.paper_document(base)
             mutate(document)
             source,ledger=fixture.write_paper(base,document)
-            with patch.dict(os.environ,{'FFPROBE_BIN':str(self.stub_ffprobe(base,duration))}),\
+            with patch.object(build.subprocess,'run',side_effect=self.fake_probe(duration)),\
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises((ValueError,AssertionError)) as caught:
                     build.build(source,base/'out',ledger)
@@ -349,7 +353,7 @@ class NeverFiredStructuralAsserts(unittest.TestCase):
             template=(ROOT/'assets'/'lesson.html').read_text(encoding='utf-8')
             (fake_root/'assets'/'lesson.html').write_text(template.replace('__EXAM_DATA__','__EXAM_DATA__ __EXAM_DATA__',1),encoding='utf-8')
             with patch.object(build,'__file__',str(fake_root/'scripts'/'build.py')),\
-                 patch.dict(os.environ,{'FFPROBE_BIN':str(self.stub_ffprobe(base,8.0))}),\
+                 patch.object(build.subprocess,'run',side_effect=self.fake_probe(8.0)),\
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises((ValueError,AssertionError)) as caught:
                     build.build(source,base/'out',ledger)

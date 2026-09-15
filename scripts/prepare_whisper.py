@@ -7,7 +7,8 @@ from bounded_command import run as run_bounded
 REPO='https://api.github.com/repos/ggml-org/whisper.cpp'
 
 def cache_root():
-    return Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local'))/'english-exam-studio' if os.name=='nt' else Path.home()/'.cache/english-exam-studio'
+    from platform_tools import runtime_root
+    return runtime_root()
 
 def remaining(deadline):
     left=deadline-time.monotonic()
@@ -51,7 +52,9 @@ def unpack(archive,dest):
                 if not safe_name(info.name) or not info.isfile():continue
                 p=dest/info.name;p.parent.mkdir(parents=True,exist_ok=True)
                 with t.extractfile(info) as f:p.write_bytes(f.read())
-                if info.mode&0o111:p.chmod(0o700)
+                # 执行位是 POSIX 概念：Windows 上 chmod 只影响只读标记，给二进制"置可执行位"没有意义。
+                # 显式判断而不是依赖 chmod 在 Windows 上恰好不报错——本机是 macOS，看不出区别。
+                if os.name!='nt' and info.mode&0o111:p.chmod(0o700)
 
 def run(command,deadline):
     command=list(map(str,command));code,out,err=run_bounded(command,remaining(deadline))
@@ -90,7 +93,7 @@ def prepare(root,install=False,seconds=120):
     if not exe:
         with tempfile.TemporaryDirectory(prefix='whisper-setup-',dir=root) as temp:
             temp=Path(temp)
-            if os.name=='nt':
+            if platform.system()=='Windows':
                 release,asset=windows_asset(fetch(REPO+'/releases?per_page=15',deadline=deadline),platform.machine())
                 archive=fetch(asset['browser_download_url'],temp/'runtime.zip',deadline)
                 if hashlib.sha256(archive.read_bytes()).hexdigest()!=asset['digest'][7:]:raise ValueError('whisper.cpp 运行时压缩包校验失败：下载内容与官方 digest 不一致，已丢弃；请检查网络或代理后重试')

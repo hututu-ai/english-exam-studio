@@ -57,7 +57,12 @@ class WhisperSetup(unittest.TestCase):
                 add('whisper.cpp/evil',b'/outside',kind=tarfile.SYMTYPE)
             out=root/'out';setup.unpack(good,out)
             binary=out/'whisper.cpp/build/whisper-cli'
-            self.assertTrue(binary.is_file());self.assertTrue(binary.stat().st_mode&0o100,'解压后应保留执行位')
+            self.assertTrue(binary.is_file())
+            if os.name=='nt':
+                # Windows 没有 POSIX 执行位（chmod 只影响只读标记），这条断言在那边没有意义；
+                # 跳过而不是让它失败——CI 的 Windows 格就是靠这条才没被误判成"解压坏了"。
+                self.skipTest('Windows 没有可执行位概念，执行位断言跳过')
+            self.assertTrue(binary.stat().st_mode&0o100,'解压后应保留执行位')
             self.assertFalse((out/'whisper.cpp/evil').exists());self.assertTrue((out/'whisper.cpp/README.md').is_file())
             with self.assertRaises(ValueError)as caught:
                 bad=root/'bad.tar.gz'
@@ -67,6 +72,7 @@ class WhisperSetup(unittest.TestCase):
             self.assertIn('不安全',str(caught.exception));self.assertFalse((root/'outside.txt').exists())
 
     def test_macos_prepare_downloads_builds_and_verifies_model(self):
+        platform_patch=patch.object(setup.platform,'system',return_value='Darwin');platform_patch.start();self.addCleanup(platform_patch.stop)
         calls=[]
         def fake_fetch(url,target=None,deadline=None):
             calls.append(url)
@@ -90,6 +96,7 @@ class WhisperSetup(unittest.TestCase):
             self.assertTrue(any('huggingface' in u for u in calls))
 
     def test_model_digest_mismatch_refuses_to_install(self):
+        platform_patch=patch.object(setup.platform,'system',return_value='Darwin');platform_patch.start();self.addCleanup(platform_patch.stop)
         def fake_fetch(url,target=None,deadline=None):
             if 'huggingface.co/api/models' in url:
                 return {'sha':'rev123','siblings':[{'rfilename':'ggml-base.bin','lfs':{'sha256':'0'*64}}]}

@@ -234,7 +234,7 @@ class Workflow(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             build.build(ROOT/'examples/demo-reading.json',out,ROOT/'examples/source-ledger.json')
         page=out/'index.html'
-        page.write_bytes(page.read_bytes().replace(b'\n',b'\r\n'))
+        page.write_bytes(page.read_bytes().replace(b'\r\n',b'\n').replace(b'\n',b'\r\n'))
         result=verify_output(out)
         self.assertEqual(result['status'],'passed')
         self.assertEqual(result['html_sha256'],hashlib.sha256(page.read_bytes()).hexdigest())

@@ -202,10 +202,24 @@ node scripts\browser_check.cjs output\demo
 - `PLAYWRIGHT_MODULE` 指向**已经存在**的 Playwright 模块目录。脚本不下载、不安装。
 - Edge 的确切路径以本机为准，可以先试 `where.exe msedge`，或查看 `C:\Program Files (x86)\Microsoft\Edge\Application\`。
 - 脚本最多运行 180 秒，只在 `127.0.0.1` 上临时开一个只读本目录的服务，不访问外部词典。
+- 机器慢（老机器、虚拟机上跑 CI）时可以放宽上限：`set BROWSER_CHECK_TIMEOUT=600`。**放宽前先看失败信息**——报告会写清"跑到第几项、卡在哪个阶段"，别把真的卡死当成"只是慢"。
 
 ### 6.3 看结果
 
 通过时控制台逐项打印 `PASS ...`，并写入 `output\demo\browser-check.json`，其中 `html_sha256` 与媒体哈希绑定本次产物。要检查 `engine`、`platform`、`browser_version`、`checks`、`errors`；`errors` 不为空就是失败。没有 Node 或没有 Playwright 时不要手写 `browser-check.json` 冒充通过。
+
+报告里这几项专门用来判断"是不是本次的、跑到哪一步"：
+
+| 字段 | 用途 |
+| --- | --- |
+| `started_at` / `elapsed_seconds` | 报告是什么时候生成的、跑了多久；配合 `html_sha256` 看它是不是本次产物对应的那一份 |
+| `phase` | 卡住时停在哪个阶段（`starting`/`launching`/`checks`/`stress`/`recovery-<模式>`） |
+| `timeout_seconds` | 本次用的上限（来自 `BROWSER_CHECK_TIMEOUT`，默认 180） |
+| `node_version` | Node 版本，排查"换了 Node 就挂"这类问题 |
+
+超时的报错会写明"已完成 N 项、最后一项是什么、当前阶段是什么"，例如
+`浏览器验收超过 180 秒还没跑完（已完成 12 项，最后一项是 …；当前阶段 stress）`——
+这条信息比一句"超时"有用得多，请把它原样发回。
 
 ### 6.4 没有 Playwright 时怎么办
 
@@ -246,12 +260,14 @@ py -3 scripts\package_lesson.py output\demo demo.zip --allow-unchecked
 
 ## 9. 自动 CI 证明了什么，还需要你证明什么
 
-`.github/workflows/compatibility.yml` 在 `windows-latest`、`macos-latest`、`ubuntu-latest` 上，用 Python 3.9 和 3.11 各跑一遍 `python -m unittest discover -s tests`（项数以 CI 实际输出为准，不在这里写死——写死过 27，后来涨到两百多，差点让人以为 CI 只跑那么点）。它只依赖 `actions/checkout` 和 `actions/setup-python`，没有 pytest、没有密钥、没有额外下载。旁边还有一个 `continue-on-error: true` 的 doctor 诊断任务，只负责在 Windows 上打印环境自检 JSON。
+`.github/workflows/compatibility.yml` 在 `windows-latest`、`macos-latest`、`ubuntu-latest` 上，用 Python 3.9 和 3.11 各跑一遍 `python -m unittest discover -s tests`（项数以 CI 实际输出为准，不在这里写死——写死过 27，后来涨到两百多，差点让人以为 CI 只跑那么点）。它是**唯一**决定 CI 红绿的作业，只依赖 `actions/checkout` 和 `actions/setup-python`，没有 pytest、没有密钥、没有额外下载。另外三个作业都是 `continue-on-error: true` 的**证据**作业，不参与红绿：doctor（Windows 环境自检 JSON）、smoke（三个系统上的实机体检报告）、browser（三个系统上的自动点击检查）。
 
 **CI 能证明的（脚本层面）：**
 
 - 同一套标准库测试在三个系统、两个 Python 版本上都能跑完，覆盖中文/空格路径、UTF-8 读写、范围筛选与顺序、分节拆分与无损合并、内嵌与外置音频、带时间转写复用、切片缓存与失效、缺 ffprobe 降级、安装完整性与模板一致性等。
 - `doctor.py` 能在 Windows runner 上执行并输出 JSON。
+- `smoke` 作业在三个系统上跑一遍"构建 → 校验 → 打包"的示例链路，报告作为产物可下载比对。
+- `browser` 作业（**非阻塞**）在三个系统上用 Playwright 自动点击示例产物，产物里有 `browser-check.json` 与 `index.html`，可下载核对 `checks`、`errors`、`engine`、`browser_version`。
 - 工作流语法与矩阵配置有效。
 
 **CI 不能证明的（必须真机 / 真卷）：**
@@ -259,9 +275,15 @@ py -3 scripts\package_lesson.py output\demo demo.zip --allow-unchecked
 - 在这台 Windows 上完成一次**真实试卷**的整卷生成；CI 用的是仓库原创示例，不是你的试卷。
 - 真实试卷的题号、选项、识别结果、答案出处与教学解析是否正确——这些必须对照原件逐题核对，自动化无法认定。
 - 真实听力音频的分段边界、逐题语境和转写准确度；CI runner 上没有 ffmpeg/whisper，也不会听音频。
-- Edge 里每个按钮的人工点击；`browser_check.cjs` 需要 Node + Playwright，CI 不安装它们，因此 CI 里**没有**跑浏览器交互。
+- Edge 里**你的成品**的每个按钮：`browser` 作业点的是自动生成的示例产物，且是**非阻塞**的——它红不代表你的电脑用不了，它绿也不代表真机能用。真机真卷的点击验证只能按下面第 4 步做。
 - WorkBuddy、豆包等宿主的完整生成链路，以及手机/微信里打开成品的效果。
 - 你机器上是否有可用的 libmp3lame 编码器——只能靠第 4 步的 `mp3_encoder` 实际判断。
+
+> **在案未决问题（如实记录）**：本仓库线上 CI 在 `browser (windows-latest, chromium)` 作业的
+> `node scripts/browser_check.cjs work/browser-output --stress` 这一步报过失败（最早的记录见
+> v1.0.13 的那次运行，早于本仓库当前维护者的改动），**原因尚未定位**。因此该作业设为非阻塞：
+> 它每次都会留下产物，供有 Windows 环境的人下载后定位；在定位清楚之前，**不要把 Windows 的
+> 浏览器交互视为已验证**。macOS / Linux 上同一作业的历史结果是绿的。
 
 **因此，在声称"Windows 可用"之前，至少要真机 + 真卷做完这一串：**
 

@@ -145,6 +145,38 @@ class DeliveryChainTests(unittest.TestCase):
         self.assertEqual(result['status'],'browser_checked')
         written=self.read(self.root/'out-plan'/'exam.json')
         self.assertEqual([key for key,value in written['features'].items() if value],['annotations','quick_answers','deep_reading'])
+    def test_browser_check_timeout_says_where_it_stopped(self):
+        """超时必须能诊断：报告里要有"跑到第几项、卡在哪个阶段"，而不是一句"超过 180 秒"。
+
+        起因：线上 Windows 格在 `--stress` 一步报过失败且原因未定位；旧报告只有一句英文超时，
+        拿不到任何进度信息。这里用 1 秒的超时真跑一次（正常只要十几秒，必然超时），
+        确认报告里有进度、阶段、起始时间与 Node 版本。
+        """
+        node=shutil.which('node')
+        if not node:self.skipTest('node 不可用')
+        module=os.environ.get('PLAYWRIGHT_MODULE','playwright')
+        probe=subprocess.run([node,'-e',f"try{{require({module!r})}}catch(e){{process.exit(3)}}"],capture_output=True,timeout=60)
+        if probe.returncode!=0:self.skipTest('Playwright 不可用，跳过真实浏览器验收')
+        chrome=self.chrome_binary()
+        if not chrome:self.skipTest('没有可用的 Chrome/Edge，跳过真实浏览器验收')
+        source=self.demo()
+        out=self.root/'out-timeout'
+        with contextlib.redirect_stdout(io.StringIO()):build.build(source,out,self.ledger_for(source))
+        environment={**os.environ,'CHROME_BIN':chrome,'BROWSER_ENGINE':'chromium','BROWSER_CHECK_TIMEOUT':'1'}
+        subprocess.run([node,str(ROOT/'scripts/browser_check.cjs'),str(out),'--stress'],capture_output=True,
+                       text=True,encoding='utf-8',errors='replace',timeout=120,env=environment)
+        evidence=json.loads((out/'browser-check.json').read_text(encoding='utf-8'))
+        self.assertEqual('failed',evidence['status'],'1 秒的上限必然超时，状态要如实是 failed')
+        message=evidence['errors'][0]
+        self.assertIn('浏览器验收超过 1 秒',message)
+        self.assertIn('当前阶段',message,'超时要说清卡在哪个阶段')
+        self.assertIn('已完成',message,'超时要说清跑到第几项')
+        self.assertEqual(1,evidence['timeout_seconds'])
+        self.assertTrue(evidence['started_at'],'报告要带起始时间，便于判断是不是旧文件')
+        self.assertTrue(evidence['node_version'])
+        self.assertIn(evidence['phase'],{'starting','launching','checks','stress'}|{f'recovery-{m}' for m in
+                                        ['no-speech','bad-storage','no-storage','no-dialog','no-canvas','bad-scores']})
+
     def test_an_ordinary_lesson_passes_the_real_browser_check(self):
         # 1.0.37 曾把"夹具必须带多页"写成通用断言，导致任何普通课件（无页图）验收直接失败。
         # 这条用真实浏览器跑一次最普通的课件，确保它仍然能被接受。

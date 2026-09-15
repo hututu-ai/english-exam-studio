@@ -16,6 +16,16 @@
 
 **本版改了什么**：[本版更新说明](docs/RELEASE-NOTES.md)（给老师看的一页，含"你要做什么"）。想先看成品长什么样：`python3 scripts/build.py examples/demo-exam.json OUT --source-ledger examples/source-ledger.json`，用仓库自带的**合成演示卷**生成一份课件（演示卷只用于看功能，不代表真实试卷）。
 
+## 1.0.117：Windows 自动检查抓出的问题（出在我的测试脚手架里）
+
+把技能包发到 GitHub 之后，**线上 Windows 自动检查立刻报了错**。查下来不是课件生成的问题，而是我这轮新加的测试里有两处按 Linux/macOS 写的辅助脚本（`#!/bin/sh` 的假 ffprobe）——Windows 上没有 `/bin/sh`；另有一条断言假定"解压后保留可执行位"，Windows 没有这个概念。
+
+- **已修**：两处"假 ffprobe"改成**给被测模块的 `subprocess.run` 打桩**——不依赖 `/bin/sh`，也不依赖可执行位；执行位断言在 Windows 上如实跳过并写明原因。技能包在 Windows 上跑自带测试不会再因为这些原因报错。
+- **另一处红灯是流水线过期，这次一并修好**：线上浏览器作业跑完验收后直接打包，而打包自 1.0.44 起要求先填好 `qa-report.md` 人工复核清单。新版工作流把这一步换成"只打印清单、不代填"（清单是人的结论），并**保留**浏览器作业——它是**非阻塞**的，红绿都会留下 `browser-check.json` 产物供下载查看，因为"Windows 上点得通吗"正是这个项目最该盯的问题，不该被删掉了事。测试作业仍是唯一决定 CI 红绿的作业。
+- **如实记一件未决事**：Windows 格上 `browser_check.cjs --stress` 这一步历史上就报过失败（最早见 v1.0.13 那次运行，早于本轮改动），**原因尚未定位**。所以 Windows 的浏览器交互仍算"未验证"，详见 [Windows 验收清单](docs/WINDOWS.md) 第 9 节。
+- **这类错以后不用等 CI 了**：新增静态闸门，扫"随发布包发给老师的每一个 Python 文件"——凡是用了 Windows 上不存在的接口（`os.killpg`、`signal.SIGKILL`、`import pwd`…）、依赖文件执行位（`chmod` 置位、`st_mode` 取执行位），或去调 `/bin/sh`、`bash`、`*.sh` 而**没有** `os.name` 判断/`skipTest` 跳过的，**本机就失败**。反向用例逐条证明它会咬。
+- **测试**：**598 项测试通过**（本机 macOS；Windows 三处修复由 CI 复核）。
+
 ## 1.0.116：交付前"课件有没有被改过"的检查补上测试，并修掉两处英文报错
 
 生成完之后有一道产出核验（`scripts/verify_output.py`），确认老师拿到的 `index.html` 就是构建出来的那一份：数据块没被手工改过、内嵌音频与 `audio/` 里的文件一致、媒体文件都在。这 7 条检查里此前**只有 1 条**被测试覆盖，其余 6 条改松不会有任何报警。

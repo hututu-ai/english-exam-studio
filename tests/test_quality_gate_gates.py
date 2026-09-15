@@ -23,6 +23,7 @@ from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
+sys.path.insert(0,str(ROOT/'tests'))   # 跨平台 ffprobe 桩
 import quality_gate
 
 TEXT='The museum opens at nine in the morning.'
@@ -198,11 +199,19 @@ class QualityGateCriteria(GateFixture):
         self.assertIn('audio_probe',self.codes(report))
 
     # —— 需要 ffprobe 才能走到的那几条：用桩脚本 ——
-    def stub_ffprobe(self,duration):
-        path=self.base/'ffprobe_stub.sh'
-        path.write_text(f'#!/bin/sh\necho "{duration}"\n',encoding='utf-8')
-        path.chmod(path.stat().st_mode|stat.S_IEXEC)
-        return path
+    def fake_probe(self,duration):
+        """给被测模块的 subprocess.run 打桩，模拟 ffprobe 报时长。
+
+        不写可执行脚本：Windows 上没有 /bin/sh、可执行位也没有意义，
+        直接替换调用点既跨平台、又只测我们关心的判据（时长不符/转写指纹/转写来源）。
+        """
+        class Result:
+            returncode=0;stderr=''
+            def __init__(self,stdout):self.stdout=stdout
+        def run(argv,**kwargs):
+            if any('format=duration' in str(a) for a in argv):return Result(f'{float(duration)}\n')
+            raise AssertionError('测试桩只预期 ffprobe 的时长查询：'+repr(argv))
+        return run
     def listening_with_alignment(self,full_end=1.0,extra=None):
         (self.base/'transcript.json').write_text(json.dumps({'source_audio_sha256':'f'*64,'segments':[]}),encoding='utf-8')
         alignment={'mode':'text','boundary':'verified','full_start':0.0,'full_end':full_end,
@@ -211,18 +220,18 @@ class QualityGateCriteria(GateFixture):
         return self.listening_section(extra={'audio_alignment':alignment})
     def test_duration_mismatch_blocks(self):
         section=self.listening_with_alignment(full_end=9.0)
-        with patch.dict(os.environ,{'FFPROBE_BIN':str(self.stub_ffprobe(1.0))}):
+        with patch.object(quality_gate.subprocess,'run',side_effect=self.fake_probe(1.0)):
             report=self.audit(self.exam(sections=[section]),ledger_path=self.ledger(sections=[section]))
         self.assertIn('audio_source_duration',self.codes(report))
     def test_missing_transcript_evidence_blocks(self):
         section=self.listening_section(extra={'audio_alignment':{'mode':'text','boundary':'verified','full_start':0.0,'full_end':1.0,
                                                                  'transcript_file':'transcript.json'}})
-        with patch.dict(os.environ,{'FFPROBE_BIN':str(self.stub_ffprobe(1.0))}):
+        with patch.object(quality_gate.subprocess,'run',side_effect=self.fake_probe(1.0)):
             report=self.audit(self.exam(sections=[section]),ledger_path=self.ledger(sections=[section]))
         self.assertIn('audio_transcript_hash',self.codes(report))
     def test_transcript_from_another_recording_blocks(self):
         section=self.listening_with_alignment()
-        with patch.dict(os.environ,{'FFPROBE_BIN':str(self.stub_ffprobe(1.0))}):
+        with patch.object(quality_gate.subprocess,'run',side_effect=self.fake_probe(1.0)):
             report=self.audit(self.exam(sections=[section]),ledger_path=self.ledger(sections=[section]))
         self.assertIn('transcript_source_audio',self.codes(report))
 

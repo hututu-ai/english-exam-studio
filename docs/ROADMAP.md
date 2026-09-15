@@ -117,6 +117,17 @@
 ### 1.0.44
 - **人工复核清单工具化**：新增 `scripts/qa_report.py`（`init` 按真实证据生成待填清单、`check` 拒绝空结论/占位文字/缺章节/被清空），并接进 `package_lesson.py` 交付闸门；`delivery-report.json` 记录 `qa_report` 状态。此前该文件只被六处文档要求、无任何脚本生成或校验。
 
+### 1.0.117
+- **Windows CI 抓到的测试脚手架问题（问题①的真机信号）**：1.0.114–1.0.116 新增测试里有两处 `#!/bin/sh` 的 ffprobe 桩、一处 POSIX 执行位断言，在 `windows-latest` 上必然失败。现把两处"假 ffprobe"改为**给被测模块的 `subprocess.run` 打桩**（不依赖 `/bin/sh`，也不依赖可执行位与 `.bat` 执行语义），执行位断言在 `os.name=='nt'` 时如实跳过。**产品代码未变，问题出在我自己的测试脚手架。**
+- **推送与发布**：本沙箱 `github.com` git 端点不通，改用 Git Data API（blobs→tree→commit→ref）把 1.0.116 推到线上（父提交＝线上 HEAD，未强推），并在 `uploads.github.com` 上传技能包/演示包/校验文件；读回核对含 blob sha 与资产指纹。
+- **仍待处理**：CI 工作流文件需更新（新版含"填 qa-report + 冒烟报告"两步），但推送凭据缺 `workflow` 权限，故先保留线上那版——浏览器作业在更新前仍会红，这是流水线过期而非产品回归。
+- **把浏览器作业放回 CI（非阻塞），而不是删掉**：我本地的新版工作流曾把 `browser` 作业整段删掉——那等于把"Windows 上的交互验收是红的"这件事藏起来，而"Windows 能用"是本项目第一要求。现恢复为**三格**（ubuntu+chromium、macos+webkit、windows+chromium，Windows 用 runner 自带 Edge），跑示例产物 `--stress` 并上传 `index.html` + `browser-check.json`；作业级与步骤级都 `continue-on-error`，**步骤级是为了让失败之后的清单与产物照样跑完**（过去拿不到 `browser-check.json`，所以看不见 Windows 挂在哪）。同时不再让 CI 跑 `package_lesson.py`：交付要求人工清单已填，那是人的结论，CI 只打印清单不代填。
+- **让"Windows 上到底卡在哪"能被诊断（不猜原因，只造工具）**：旧超时只写一句英文 `exceeded 180 seconds`，而产物下载要凭据，等于红得没信息。现改：① 超时可配（`BROWSER_CHECK_TIMEOUT`，默认 180 秒），文档写明"放宽前先看失败信息"；② 超时报错带进度（已完成几项、最后一项、当前阶段）；③ 报告新增 `started_at`/`elapsed_seconds`/`phase`/`timeout_seconds`/`node_version`，并在启动、检查、压力模式、每种恢复模式前更新 `phase` 并落盘（进程被硬杀也留现场）；④ CI 新增 `if: always()` 步骤把 `browser-check.json` 打进日志，**不用下载产物、不用凭据**就能看到失败原因与堆栈。新增 1 项真实浏览器用例（`BROWSER_CHECK_TIMEOUT=1`）钉住这些字段；正常路径仍是 `passed=30 skipped=3`。
+- **如实记一处未决问题**：线上 CI 在 `browser (windows-latest, chromium)` 的 `--stress` 一步报过失败，最早记录见 v1.0.13 那次运行，早于本维护者的改动，**原因尚未定位**；macOS/Linux 同格历史为绿。该作业保持非阻塞，但**不把 Windows 浏览器交互记为已验证**（`docs/WINDOWS.md` 第 9 节同载）。
+- **把"Windows 上会炸的写法"变成本机就能跑的静态闸门**：1.0.116 的红灯之所以只能靠推上去才发现，是因为那类写法在 macOS 上永远是绿的。新增 `tests/test_windows_portability.py`（17 项），用 AST 扫**随包发布的每个 `.py`**（清单复用 `package_skill.shipped_files()`，与打包同口径）：用了 Windows 上不存在的接口（`os.killpg`/`signal.SIGKILL`/`import pwd` 等）、依赖执行位（`chmod` 置位、`st_mode` 取执行位、`stat.S_IEXEC`）、或去调 `sh`/`bash`/`*.sh`，而同一函数里没有 `os.name`/`sys.platform` 判断或 `skipTest` 跳过的，**本机直接失败**。规则只认 AST 节点不认注释与字符串（夹具里的 tar 元数据 `0o755`、把 `'.sh'` 当搜索词都不误报，各有专门用例）；每条规则都有反向用例，并额外用"把 1.0.116 那个 `stub_ffprobe` 原样放回来"验证过闸门确实会咬（报 1 条、删掉归 0）。顺手把 `prepare_whisper.py` 解压后置执行位那一步改成显式认 Windows（`os.name!='nt'`），使闸门零豁免。
+- **显式判据"从未被任何测试触发过"清零（对着第 7 条：不许乱编）**：把"判据的说明必须出现在测试里"的覆盖面从交付三文件扩到**全部 41 个随包脚本**，量出 **24 条**从未被提到的判据（`prepare_whisper` 6、`audio` 4、`import_timed_text` 3、`extract_package` 2、`preferences` 2，其余 7 个文件各 1），逐条用真实夹具触发：时间预算到点、压缩包不安全路径/超 2GB、旧运行时不覆盖、空/截断 WAV、**切点引文与转写不匹配**、字幕坏行/缺文字/无时间段、备份目录与技能目录重叠、没先问老师、选不出板块、功能编号越界、分节文件 ID 与文件名不符、包版本不符、引用指向不存在的段落、目录里没有图片等（新增 `tests/test_raise_gates.py`）。
+  **口径本身也被反向验证咬了一次**：照搬"一律 5 字窗口"时，塞进脚本的 `ZQPROBE9917` 竟被判成"已被提到"——因为 5 字窗口 `PROBE` 命中了测试里的 `FFPROBE_BIN`；改成"中文 5 字、ASCII 8 字"后，又揭出 **10 条假通过**（靠 `DOCX `、`files`、`SRT /` 这类通用片段撞上的），也逐条补齐，严格口径下缺口为 0。守卫自身另有反向用例：临时塞一条罕见字判据进 `parts.py` 必须被报出，随后逐字节还原。顺带发现 README 那句测试总数**从来没被核对过**（写法不在 `check_docs` 认的两种格式里），已改成可核对写法并做了变异验证（写 596、实际 597 时立刻报错）。
+
 ### 1.0.116
 - **产出核验的 7 条交付判据补反向验证**：用全量 `trace` 量出 `verify_output.py` 的判据里只有 1 条被测试提到过，其余 6 条（HTML 被改、内嵌数据与 `exam.json` 不一致、缺/空媒体文件、内嵌音频集合不一致、内嵌音频值不是 base64、内嵌音频内容不符）都是**交付阻断级**。新增 `tests/test_verify_output_gates.py` 14 项注入用例（含打包闸门的软链接拒绝），12 条反向验证全部有约束力。
 - **修掉两处漏英文的报错**：内嵌音频文件缺失时由 `FileNotFoundError` 改为中文「缺少或无效的媒体文件」；数据块被粘成两份时由 `JSONDecodeError: Extra data…` 改为中文「examData 不是合法 JSON…请用官方模板重新构建」。另把"值不是 base64"从"找不到文件"那句里拆出来，不再指错方向。
@@ -398,19 +409,19 @@
 ### 1.0.45
 - **报错一次列全 + 中文化 + 带实际值**：`validate_section` 每组检查单独兜住，一次构建列出本节全部问题（改前只报第一个，同样 5 个问题要重建 5 次）；全仓脚本 85 条英文报错改为中文并给出实际值与下一步；同一处挖空错误不再重复报。新增 `tests/test_messages.py` 用 AST 静态锁住"报错必须中文且带说明"。
 
-## 当前状态（按目标逐条对照，1.0.116）
+## 当前状态（按目标逐条对照，1.0.117）
 
 > 标题里的版本号必须等于 `VERSION`（`scripts/check_docs.py` 核对）——它的含义是"发这一版时，这张表**逐条复核过**、结论仍然成立"，所以发版时要么确认它没变（只改版本号），要么把变了的结论一并改掉；确认不了就别写版本号。
 
 | 目标里的问题 | 状态 | 证据在哪 |
 | --- | --- | --- |
-| ① Windows 必须能用 | **代码侧已就绪，缺实机**：同一套纯标准库脚本；CRLF 下按原始字节算指纹（1.0.19）；cp1252/cp936 下 `force_utf8()` 兜底（1.0.16）；路径与保留设备名有专门测试 | `tests/test_windows_paths.py`、`.github/workflows/compatibility.yml`（三个平台 × 两个 Python 版本，非阻塞）、[Windows 验收清单](WINDOWS.md) 顶部"一条命令跑完，把文件发回" |
+| ① Windows 必须能用 | **代码侧已就绪，缺实机**：同一套纯标准库脚本；CRLF 下按原始字节算指纹（1.0.19）；cp1252/cp936 下 `force_utf8()` 兜底（1.0.16）；路径与保留设备名有专门测试；**新增静态闸门**把"用了 Windows 上不存在的接口/依赖执行位/调 POSIX shell 而没有平台判断"的写法挡在本机（1.0.117）。CI 侧：测试作业（三平台 × 两版本）是唯一红绿判定，另有三个**非阻塞证据作业**（doctor / smoke / browser）。**如实记**：Windows 格上 `browser_check.cjs --stress` 一步历史上报过失败且原因未定位，故 Windows 的浏览器交互仍算"未验证" | `tests/test_windows_paths.py`、`tests/test_windows_portability.py`、`.github/workflows/compatibility.yml`、[Windows 验收清单](WINDOWS.md) 第 9 节的"在案未决问题" |
 | ② 生成特别久 | 已定位并分档量化：**脚本侧** 32 节/64 题 = 构建 0.68 秒 + 产物核验 0.01 秒 + 浏览器点击验收 45.7 秒（1.0.76 去掉了重复检测的平方级热点、1.0.77 去掉了词库裁剪热点，构建 4.26s→0.68s）；浏览器验收按约 0.27 秒/题增长且刻意不走近路（真点真播）。**主要时间仍花在助手返工与轮次**，故做了"报错一次列全"、可照做的中文提示、快速档、分节写作与一页主流程 | `docs/VERIFICATION.md` 1.0.45 / 1.0.76 / 1.0.77 的耗时实测；`references/generation-planning.md`、`references/harness.md` |
 | ③ 省 token / 省积分 | 已做：只做所选范围、长引文 `quote_ref` 回填、按篇裁剪离线词库、快速档、逐字重复账单、改写型人工清单 | `scripts/cost.py --duplicates`、`scripts/scope.py`、`scripts/quotes.py` |
 | ④ 豆包工作 / WorkBuddy 表现更好 | **探测+指引+判读已就绪，缺实机**：四条安装路径与可用性（老师上传 ZIP → 抓 raw → jsDelivr 备选 → git clone）、无多选控件走编号清单、预览受限就交付下载包、受限网络优先"老师上传 ZIP" | `scripts/host_probe.py --network`、`references/host-compatibility.md` |
 | ⑤ 每次让老师选功能 | 已做：`plan.py menu/make/check`，七项功能一次列全、`--confirmed` 必填、不替老师作答 | `scripts/plan.py`、`tests/test_plan.py`、[老师一页说明](TEACHER-QUICKSTART.md) |
 | ⑥ 只要听力 | 已做：范围 A（`--range A`），同一套 Skill，不需要另装 | `plan.py menu` 的 A 档；实测只保留听力节、`mode=intensive` |
-| ⑦ 文化背景/篇章结构/生词难词/挖空不许 AI 乱编 | 已做，且**每条闸门都有反向验证**（注入缺陷必须被拦，报错带实际值）：引文必须逐字出自原文、生词必须真的出现在本篇且次数吻合、文化背景必须有可核对来源、听力挖空必须落在转写原文的完整真实词上、逐句译文必须与分句一一对应且不许抄英文 | `scripts/grounding.py`、`scripts/culture.py`、`scripts/sentence_split.py`、`tests/test_gates_fire.py`；人工结论仍归 `qa-report.md` |
+| ⑦ 文化背景/篇章结构/生词难词/挖空不许 AI 乱编 | 已做，且**每条闸门都有反向验证**（注入缺陷必须被拦，报错带实际值）：引文必须逐字出自原文、生词必须真的出现在本篇且次数吻合、文化背景必须有可核对来源、听力挖空必须落在转写原文的完整真实词上、逐句译文必须与分句一一对应且不许抄英文 | `scripts/grounding.py`、`scripts/culture.py`、`scripts/sentence_split.py`、`tests/test_gates_fire.py`；**显式 `raise` 判据也已全部纳入"说明必须出现在测试里"的守卫**（1.0.117 补齐 24+10 条，`tests/test_raise_gates.py`）；人工结论仍归 `qa-report.md` |
 | 结构由试卷决定 | 已做：题型名/顺序/板块/分值全部取自试卷（初中"短文填空""配对阅读"原样出现），`kind_preset` 宣告优先 | `scripts/section_kinds.py`、`tests/test_paper_structure.py`、`tests/make_paper_structure_fixture.py` |
 | 课堂反馈（字号 / 选项查词带读 / 短语固搭 / 逐句译文） | 已修并带真实浏览器回归 | 1.0.50、1.0.57 的验证记录；`scripts/browser_check.cjs` 的对应检查项 |
 | 分值 / 图片选项 / 跨页照片 | 已做：分值与满分用时显示并校验；`option_images` 支持听句子选图；跨页照片登记 `logical_pages` 并提醒逐页核对 | 1.0.51、1.0.52、1.0.53 的验证记录 |
@@ -449,6 +460,7 @@
 
 ## 后续可做（按价值排序）
 
+0. **把 CI 工作流推上线并看 Windows 的浏览器报错**：本地新版已就绪（恢复 `browser` 作业为非阻塞、补 `smoke`、不再让 CI 跑 `package_lesson.py`），只差 `workflow` 权限的凭据；推送后第一件事是下载 Windows 格的 `browser-check.json`，定位 `--stress` 那一步到底挂在哪。
 1. **用真实大卷做一次耗时剖面**：`timing` 与 `authoring_cost` 已就位，但还缺"识别/转写 vs 编写"的真实占比数据。拿到真实卷后再决定优化方向，不凭感觉归因。
 2. **反编造再扩展**：译文与语篇综述目前只能靠人工复核，可加语义复核清单与抽查记录格式。
 3. **按全量 trace 清单继续补"从未触发"的报错判据**：1.0.116 的全套 `trace` 留了一份清单——`build` 5、`extract` 4（DOCX 坏文件/缺正文/不支持格式）、`cost` 3（CLI 入口的失败分支）、`image_pages` 3、`read_acceptance` 3、`bounded_command` 2、`exam_document` 2（形状守卫的两条分支）、`fetch_package` 2、`quotes` 2、`scaffold` 2，以及若干单条。这些多数是"老师给的文件坏了"或"命令用错"的路径，正是最该给出中文下一步的地方。

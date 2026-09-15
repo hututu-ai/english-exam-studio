@@ -42,7 +42,10 @@ def force_utf8():
         except (AttributeError,ValueError):pass
 
 def runtime_root():
-    return Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local'))/'english-exam-studio' if IS_WINDOWS else Path.home()/'.cache/english-exam-studio'
+    if IS_WINDOWS:
+        local_app_data=os.environ.get('LOCALAPPDATA')
+        return (Path(local_app_data) if local_app_data else Path.home()/'AppData/Local')/'english-exam-studio'
+    return Path.home()/'.cache/english-exam-studio'
 
 def find_tool(*names):
     for name in names:

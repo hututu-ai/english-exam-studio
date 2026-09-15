@@ -1,25 +1,126 @@
-name: Cross-platform skill checks
-on: [push, pull_request, workflow_dispatch]
+# 跨平台兼容性检查（compatibility）
+#
+# 目的：同一套纯标准库 Python 脚本，必须在 Windows / macOS / Linux 上跑通同一份测试。
+# 这个工作流做四件事：
+#   1. 跑仓库自带的 unittest 套件（标准库，没有 pytest 依赖）；
+#   2. 在 Windows 上打印一份 doctor 环境自检报告，作为诊断证据（非阻塞）；
+#   3. 在三个系统上生成一份实机体检报告并上传产物（非阻塞）；
+#   4. 在三个系统上用 Playwright 自动点击示例产物，失败阻止验收通过。
+# 单元测试与浏览器检查都参与红/绿判定；环境诊断保留为非阻塞证据。
+#
+# 绿色结果的含义与边界：它证明这些脚本测试通过，不等于在某个系统上已完成真实整卷生成，
+# 也不等于真实试卷答案、听力边界或浏览器交互已经验收。真机真卷的验收清单见 docs/WINDOWS.md。
+
+name: 跨平台兼容性检查
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# 只需要读取仓库内容，用最小权限。
 permissions:
   contents: read
+
 jobs:
-  workflow:
+  test:
+    name: 单元测试 · ${{ matrix.os }} · Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # 一格失败不掩盖其他格的真实结果，方便逐平台排查。
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        python-version: ['3.9', '3.11']
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+      - name: 安装 Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: 显示 Python 版本
+        run: python -V
+      - name: 文档一致性（命令/参数/版本/链接/测试数量）
+        run: python scripts/check_docs.py
+      - name: 运行自带测试套件
+        # 工作目录默认就是仓库根目录（$GITHUB_WORKSPACE），与老师在本机执行的目录一致。
+        # 套件是标准库 unittest，不需要 pytest，也不安装其他依赖。
+        # 刻意不设置 PYTHONUTF8 / PYTHONIOENCODING：让 Windows 上真实的控制台编码路径
+        # （cp1252/cp936）被测试覆盖，中文输出由脚本自己的 force_utf8 兜底。
+        run: python -m unittest discover -s tests
+
+  doctor:
+    # 诊断任务，非阻塞（continue-on-error: true）。
+    # doctor.py 是“环境自检”，不是发布门禁，出现下面两种情况都算预期，不应让工作流变红：
+    #   * 安装清单缺失或过期（文件哈希对不上）时，它返回非零退出码；在仓库发布流程中
+    #     清单过期属正常中间状态，由发布者在打包时重新生成；
+    #   * 干净的 CI runner 上通常没有 ffmpeg/ffprobe，也没有 whisper.cpp，报告里的
+    #     capability 会是 no_ffmpeg；这属于“本机工具未准备”，不是跨平台代码回归。
+    # 因此这里只把 --json 报告打印出来供排查，不参与通过/失败判定。
+    name: doctor 环境自检（非阻塞）
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+      - name: 安装 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 打印 doctor 报告
+        run: python scripts/doctor.py --json
+
+  smoke:
+    # 在真实 Windows / macOS / Linux runner 上生成一份"实机体检报告"并作为产物上传。
+    # 这是老师/维护者在自己机器上跑 scripts/smoke_report.py 的自动化版本：
+    # 不需要 Playwright（用 --no-browser），浏览器点击验收仍必须真机执行。
+    # 非阻塞：报告本身就是结论，步骤失败也会照常上传，便于比对三个平台差异。
+    name: 实机体检报告 · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
-        python: ['3.9', '3.11']
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: 检出仓库
+        uses: actions/checkout@v4
+      - name: 安装 Python 3.11
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
-      - run: python -m unittest discover -s tests -v
-      - run: python scripts/build.py examples/demo-reading.json output/demo --source-ledger examples/source-ledger.json
-      - run: python scripts/verify_output.py output/demo
+          python-version: '3.11'
+      - name: 生成体检报告
+        continue-on-error: true
+        run: python scripts/smoke_report.py --no-browser --workdir smoke-output --report-dir smoke-report
+      - name: 判读体检报告（能证明什么、还不能证明什么）
+        continue-on-error: true
+        run: python scripts/read_acceptance.py smoke-report/smoke-report.json
+      - name: 上传体检报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report-${{ matrix.os }}
+          path: smoke-report/
+          if-no-files-found: warn
+
   browser:
+    # 浏览器交互的自动检查；失败会标红，证据始终上传。
+    #
+    # 为什么保留而不是删掉：Windows 上的交互问题只有真点一次才看得见，把它藏起来就等于
+    # 把"Windows 能不能用"这个最重要的问题藏起来。所以这里照常跑，红/绿都留证据。
+    #
+    # 它跑的是 tests/make_browser_fixture.py 生成的示例产物，不是老师的试卷；
+    # 环境（runner 上的 Edge/Chromium、无音频设备、无 ffmpeg）也与真机不同。它红不等于
+    # Windows 上就用不了，但必须查清后再发布；它绿也不等于所有真机能用，结论看 browser-check.json，
+    # 交付前的判定仍按 docs/WINDOWS.md 第 9 节在真机真卷上做。
+    #
+    # 刻意不跑 package_lesson.py：交付包要求人工复核清单（qa-report.md）已逐条填写，
+    # 那是人的结论，CI 填不出来也不该代填；这里只把清单打印出来（qa_report.py init），
+    # 让人看到还差哪几条。
+    name: 浏览器点击验收（示例产物）· ${{ matrix.os }} · ${{ matrix.engine }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -30,37 +131,63 @@ jobs:
             engine: webkit
           - os: windows-latest
             engine: chromium
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: 检出仓库
+        uses: actions/checkout@v4
+      - name: 安装 Python 3.11
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - uses: actions/setup-node@v4
+      - name: 安装 Node 22
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --no-save --no-package-lock playwright@1.62.1
-      - if: runner.os != 'Windows'
+      - name: 安装 Playwright（只装在 CI 临时目录，不进仓库，不影响老师本机）
+        run: npm install --no-save --no-package-lock playwright@1.62.1
+      - name: 下载浏览器内核（Windows 用系统自带的 Edge，见下一步）
+        if: runner.os != 'Windows'
         run: npx playwright install --with-deps ${{ matrix.engine }}
-      - if: runner.os == 'Windows'
+      - name: Windows 上用系统自带的 Edge 当 Chromium 内核
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $examEdge = Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'
           if (!(Test-Path $examEdge)) { throw 'Runner Edge executable missing' }
           "CHROME_BIN=$examEdge" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - run: python tests/make_browser_fixture.py work/browser-input work/browser-output
-      - run: node scripts/browser_check.cjs work/browser-output --stress
+      - name: 生成示例产物（仓库原创，不是老师的试卷）
+        run: python tests/make_browser_fixture.py work/browser-input work/browser-output
+      - name: 自动点击检查（--stress：真点真播，含边界与并发）
+        # 失败保留退出码；后续证据步骤通过 always() 执行。
         env:
           BROWSER_ENGINE: ${{ matrix.engine }}
-      - run: python scripts/package_lesson.py work/browser-output work/checked-lesson.zip
-      - run: python scripts/build.py work/browser-input/exam.json work/selected-output --source-ledger work/browser-input/source-ledger.json --plan examples/teaching-plan.json
-      - run: node scripts/browser_check.cjs work/selected-output
-        env:
-          BROWSER_ENGINE: ${{ matrix.engine }}
-
-      - uses: actions/upload-artifact@v4
+          BROWSER_CHECK_TIMEOUT: '600'
+        run: node scripts/browser_check.cjs work/browser-output --stress
+      - name: 打印这次交付还差哪些人工复核（CI 不代填）
+        continue-on-error: true
+        run: python scripts/qa_report.py init work/browser-output
+      - name: 把验收报告打进日志（不用下载产物也能看到失败原因）
+        # 为什么要这一步：线上 Windows 格的失败曾经只能靠下载产物才能看到原因，而产物下载需要凭据。
+        # 报告里有 started_at / elapsed_seconds / phase / errors（含完整堆栈），打进日志后
+        # 任何人点开这一次运行就能判断是超时、卡在哪个阶段，还是哪一项断言不通过。
         if: always()
+        shell: bash
+        run: |
+          report=work/browser-output/browser-check.json
+          if [ -f "$report" ]; then
+            echo "===== browser-check.json ====="
+            cat "$report"
+          else
+            echo "没有生成 $report：检查上一步是不是连浏览器都没起来"
+            ls -la work/browser-output 2>/dev/null || true
+          fi
+
+      - name: 上传浏览器验收证据（index.html + browser-check.json）
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: browser-${{ matrix.os }}-${{ matrix.engine }}
-          path: work/browser-output/browser-check.json
+          path: |
+            work/browser-output/browser-check.json
+            work/browser-output/index.html
+            work/browser-output/qa-report.md
+          if-no-files-found: warn

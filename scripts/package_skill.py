@@ -22,13 +22,23 @@ def write_sums(out,digest):
     sums.write_text(''.join(f'{rows[name]}  {name}\n' for name in sorted(rows)),encoding='utf-8')
     return sums
 
-def package(root,out):
-    root=Path(root).resolve();out=Path(out).resolve()
-    # dist/ 不进包；根目录的验收报告同样不进包——它是旧版残留，发出去会让老师误读（check_docs.py 也会报）。
-    names=[p for p in root.rglob('*') if p.is_file() and not p.is_symlink()
+def shipped_files(root):
+    """随发布包发给老师的文件清单（不含 dist/、旧验收报告、清单自身与校验文件）。
+
+    单独成一个函数是为了让别的检查复用同一份口径：静态闸门（tests/test_windows_portability.py）
+    要扫的"交付包里的每个 Python 文件"必须和这里打包的文件是同一批，否则闸门会看着一个
+    老师根本收不到的文件报错、或者漏掉真正发出去的文件。
+    """
+    root=Path(root).resolve()
+    return [p for p in root.rglob('*') if p.is_file() and not p.is_symlink()
         and not any(x.startswith('.') or x in ('dist','work','__pycache__') for x in p.relative_to(root).parts)
         and p.relative_to(root).as_posix() not in ROOT_REPORT_RESIDUE
         and p.suffix not in ('.pyc','.zip') and p.name!='install-manifest.json' and p.name!='SHA256SUMS.txt']
+
+def package(root,out):
+    root=Path(root).resolve();out=Path(out).resolve()
+    # dist/ 不进包；根目录的验收报告同样不进包——它是旧版残留，发出去会让老师误读（check_docs.py 也会报）。
+    names=shipped_files(root)
     inventory={'version':(root/'VERSION').read_text(encoding='utf-8').strip(),'files':{p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(names)}}
     (root/'install-manifest.json').write_text(json.dumps(inventory,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     report=check(root)
