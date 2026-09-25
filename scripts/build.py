@@ -352,11 +352,15 @@ def build(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile=N
     if not review:raise ValueError('缺少独立内容复核记录：先用 teaching_review.py draft 生成清单，实际复核后用 --review 传入')
     review_data=json.loads(Path(review).read_text(encoding='utf-8'));judgment=check_teaching(document,review_data,src.parent)
     if judgment['errors']:raise ValueError('内容复核未完成：\n'+'\n'.join(judgment['errors']))
+    from listening_delivery import check as check_listening_delivery
+    wired=copy.deepcopy(document)
+    wire_audio(wired,src.parent,bundle_dir(src.parent,audio_bundle))
+    listening_contract=check_listening_delivery(wired,plan_data,src.parent)
     result=_render(src,out,source_ledger=ledger,audio_bundle=audio_bundle,answer_key=answer_key,plan=plan,audio_mode=audio_mode,dictionary_scope=dictionary_scope)
     out=Path(out)
     (out/'generation-plan.json').write_text(json.dumps(plan_data,ensure_ascii=False,indent=2),encoding='utf-8')
     (out/'teaching-review.json').write_text(json.dumps(review_data,ensure_ascii=False,indent=2),encoding='utf-8')
-    report=json.loads((out/'build-report.json').read_text(encoding='utf-8'));report['task_contract']=contract;report['teaching_review']=judgment
+    report=json.loads((out/'build-report.json').read_text(encoding='utf-8'));report['task_contract']=contract;report['teaching_review']=judgment;report['listening_delivery']=listening_contract
     (out/'build-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     return result
 

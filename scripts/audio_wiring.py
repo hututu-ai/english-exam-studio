@@ -78,7 +78,8 @@ def wire_audio(d,src_dir,directory):
             report['pending'].append('未附转写证据：'+why+'；请恢复原音或重跑转写后再交付')
     segments_by_id={str(s['id']):s for s in (text_bundle or {}).get('segments',[])}
     for section in listening:
-        if section.get('audio'):continue
+        # A previous full-recording fallback must not hide newly completed cuts.
+        if section.get('audio') and section.get('audio_scope')!='full_paper' and (section.get('audio_alignment') or {}).get('mode')!='unsegmented':continue
         segment=segments_by_id.get(str(section['id']))
         if segment is None:
             wanted={str(q['id']) for q in section.get('questions',[])}

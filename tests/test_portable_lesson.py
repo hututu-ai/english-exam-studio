@@ -13,7 +13,7 @@ class PortableGates(VerifyOutputGates):
     def test_image_escape(self):
         d=self.payload();d['_embedded_images']['../bad']='data:image/png;base64,YmFk';self.rewrite_payload(d);self.assert_refused('内嵌图像路径越界')
     def test_portable_template_and_all_images_present(self):
-        d=self.payload();self.assertEqual(base64.b64decode(d['_export_template']).decode(),(ROOT/'assets/lesson.html').read_text());self.assertEqual(len(d['_embedded_images']),4)
+        d=self.payload();self.assertEqual(base64.b64decode(d['_export_template']).decode(),(ROOT/'assets/lesson.html').read_text(encoding='utf-8'));self.assertEqual(len(d['_embedded_images']),4)
 class AudioConversion(unittest.TestCase):
     def test_unsupported_audio_fails_clearly_when_tool_missing(self):
         with tempfile.TemporaryDirectory() as t:
