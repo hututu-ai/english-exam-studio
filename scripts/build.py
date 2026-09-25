@@ -4,7 +4,7 @@
 Audio is wired automatically from an audio bundle (audio.py output) so no one has to keep the
 file names in sync by hand: --audio-bundle DIR, or auto-detected audio-work / audio-out.
 """
-import argparse,base64,copy,json,re,shutil,subprocess,time,mimetypes,wave
+import argparse,base64,copy,json,re,shutil,subprocess,time,mimetypes,wave,tempfile,hashlib
 from pathlib import Path
 from audio_wiring import bundle_dir, wire_audio
 from verify_output import verify_output, verify_template
@@ -441,9 +441,23 @@ def _render(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile
         path=(src.parent/value).resolve();assert path.is_file(),f'找不到资源文件：{value!r}（按 {src.parent} 相对路径查找）；请核对文件名大小写与相对位置';return path
     planned=[]
     audio_sources={}
+    portable_cache=tempfile.TemporaryDirectory(prefix="exam-portable-")
+    normalized_audio={}
     def media(obj,key,folder,stem):
         if not obj.get(key):return
-        source=source_path(obj[key]);name=f'{folder}/{stem}{source.suffix.lower()}'
+        source=source_path(obj[key])
+        if folder=='audio' and audio_mode=='embedded' and source.suffix.lower() not in {'.mp3','.wav','.m4a','.aac'}:
+            if source not in normalized_audio:
+                ffmpeg=find_tool('ffmpeg')
+                if not ffmpeg:raise ValueError('该录音需要转换为兼容手机的 MP3；请先准备 FFmpeg 再构建')
+                converted=Path(portable_cache.name)/(hashlib.sha256(str(source).encode()).hexdigest()+'.mp3')
+                try:
+                    result=subprocess.run([ffmpeg,'-nostdin','-y','-i',str(source),'-vn','-codec:a','libmp3lame','-b:a','128k',str(converted)],capture_output=True,timeout=180)
+                except subprocess.TimeoutExpired:raise ValueError('兼容音频转换超过 180 秒，已停止')
+                if result.returncode:raise ValueError('兼容音频转换失败：'+result.stderr.decode(errors='replace')[-2000:])
+                normalized_audio[source]=converted
+            source=normalized_audio[source]
+        name=f'{folder}/{stem}{source.suffix.lower()}' 
         if folder=='audio':
             if source in audio_sources:obj[key]=audio_sources[source];return
             audio_sources[source]=name
@@ -527,7 +541,14 @@ def _render(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile
             mime=mimetypes.guess_type(name)[0] or 'audio/mpeg'
             embedded[name]='data:'+mime+';base64,'+base64.b64encode(source.read_bytes()).decode('ascii')
     d['audio_delivery']={'mode':audio_mode,'embedded_count':len(embedded),'external_audio_count':sum(n.startswith('audio/') for _,n in planned)}
-    html_data={**d,'_embedded_audio':embedded}
+    embedded_images={}
+    if audio_mode=='embedded':
+        for source,name in planned:
+            mime=mimetypes.guess_type(name)[0] or ''
+            if mime.startswith('image/'):
+                embedded_images[name]='data:'+mime+';base64,'+base64.b64encode(source.read_bytes()).decode('ascii')
+    export_template=(assets/'lesson.html').read_text(encoding='utf-8').encode('utf-8')
+    html_data={**d,'_embedded_audio':embedded,'_embedded_images':embedded_images,'_export_template':base64.b64encode(export_template).decode('ascii')}
     payload=json.dumps(html_data,ensure_ascii=False).replace('<','\\u003c').replace('\u2028','\\u2028').replace('\u2029','\\u2029')
     template=(Path(__file__).resolve().parents[1]/'assets'/'lesson.html').read_text(encoding='utf-8')
     # 占位符数量与模板指纹已由上面的 verify_template() 校验（1.0.115 移除了这里重复的断言：
@@ -573,6 +594,7 @@ def _render(src,out,source_ledger=None,audio_bundle=None,answer_key=None,profile
     report['browser_playback']='not_tested_by_builder'
     (out/'answer-audit.json').write_text(json.dumps(report['answer_audit'],ensure_ascii=False,indent=2),encoding='utf-8')
     (out/'build-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+    portable_cache.cleanup()
     remove_stale_outputs(out,assets,resources)
     print(json.dumps(report,ensure_ascii=False))
 

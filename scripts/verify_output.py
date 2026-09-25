@@ -46,6 +46,14 @@ def verify_output(output,skill_root=None):
         # （实测：`JSONDecodeError: Extra data: line 1 column 456981`），既看不懂也不知道该做什么。
         raise ValueError(f'index.html 里的 examData 不是合法 JSON（可能被手工编辑，或嵌入了两份数据）：{error}；'
                          '请用官方模板重新构建，不要手工改 index.html') from None
+    export_template=data.pop('_export_template',None)
+    if export_template is not None and base64.b64decode(export_template,validate=True).decode('utf-8')!=template:raise ValueError('单文件导出模板与当前模板不一致')
+    images=data.pop('_embedded_images',{})
+    for name,value in images.items():
+        target=(out/name).resolve()
+        if out.resolve() not in target.parents:raise ValueError('内嵌图像路径越界：'+name)
+        if not target.is_file() or target.stat().st_size==0:raise ValueError('缺少或无效的媒体文件：'+name)
+        if base64.b64decode(value.split(';base64,',1)[1],validate=True)!=target.read_bytes():raise ValueError('内嵌图像与来源文件不一致：'+name)
     media=data.pop('_embedded_audio',{})
     if data!=json.loads((out/'exam.json').read_text(encoding='utf-8')):raise ValueError('index.html 内嵌的考试数据与 exam.json 不一致；请重新构建，确保交付的是同一次生成的产物')
     paths=set([data['full_audio']] if data.get('full_audio') else [])

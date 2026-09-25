@@ -92,7 +92,7 @@ class VerifyOutputGates(unittest.TestCase):
         data=self.payload();data['audio_delivery']['mode']='folder'
         data['_embedded_audio']['audio/悄悄加的.wav']='data:audio/mpeg;base64,AAAA'
         self.rewrite_payload(data)
-        sync=dict(data);sync.pop('_embedded_audio')      # exam.json 里没有内嵌音频这份数据
+        sync=dict(data);sync.pop('_embedded_audio');sync.pop('_embedded_images',None);sync.pop('_export_template',None)      # exam.json 里没有内嵌音频这份数据
         (self.out/'exam.json').write_text(json.dumps(sync,ensure_ascii=False),encoding='utf-8')
         self.assert_refused('出现了没有对应音频文件的内嵌音频')
     def test_embedded_audio_content_must_match_the_file(self):
